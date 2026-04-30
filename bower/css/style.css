@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #FFF8F0;
+  font-family: 'ZCOOL XiaoWei', serif;
+}
+
+.garden {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.rose-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rose-layer-back {
+  z-index: 1;
+}
+
+.rose-layer-front {
+  z-index: 2;
+}
+
+/* 每朵玫瑰的容器 */
+.rose-container {
+  position: absolute;
+  transform-origin: bottom center;
+  animation: roseAppear 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.rose-svg {
+  display: block;
+  transform-origin: 50% 100%;
+}
+
+.rose-svg.is-swaying {
+  animation: roseSway var(--sway-duration, 6.6s) ease-in-out var(--sway-delay, 0s) infinite alternate;
+  will-change: transform;
+}
+
+@keyframes roseAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0.1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes roseSway {
+  0% {
+    transform: var(--flip-transform, scaleX(1)) rotate(calc(var(--sway-angle, 2deg) * -1)) translateY(0);
+  }
+
+  50% {
+    transform: var(--flip-transform, scaleX(1)) rotate(calc(var(--sway-angle, 2deg) * 0.25)) translateY(calc(var(--sway-lift, 1px) * -0.55));
+  }
+
+  100% {
+    transform: var(--flip-transform, scaleX(1)) rotate(var(--sway-angle, 2deg)) translateY(calc(var(--sway-lift, 1px) * -1));
+  }
+}
+
+/* 顶部提示文字 */
+.hint {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-size: 22px;
+  color: #b8a090;
+  letter-spacing: 4px;
+  pointer-events: none;
+  animation: hintFade 4s ease-in-out infinite;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+@keyframes hintFade {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 花朵计数器 */
+.counter {
+  position: fixed;
+  bottom: 24px;
+  right: 32px;
+  z-index: 10;
+  font-size: 15px;
+  color: #c4a99a;
+  letter-spacing: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.counter.visible {
+  opacity: 1;
+}
+
+/* 涟漪点击反馈 */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 182, 193, 0.4) 0%, transparent 70%);
+  pointer-events: none;
+  animation: rippleAnim 0.8s ease-out forwards;
+  z-index: 5;
+}
+
+@keyframes rippleAnim {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 1;
+  }
+
+  100% {
+    width: 120px;
+    height: 120px;
+    opacity: 0;
+  }
+}

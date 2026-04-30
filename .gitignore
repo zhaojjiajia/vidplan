@@ -5,3 +5,6 @@
 .idea/
 .vscode/
 .claude/
+bower/data/
+bower/node_modules/
+bower/.env

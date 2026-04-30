@@ -1,0 +1,12 @@
+{
+  "name": "bower-garden",
+  "version": "1.0.0",
+  "private": true,
+  "description": "匿名访客限种一次的共享花园",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
