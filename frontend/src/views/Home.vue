@@ -1,13 +1,13 @@
 <template>
-  <div class="home">
+  <div ref="homeRef" class="home">
     <header class="topbar">
       <div class="topbar-inner">
         <router-link to="/" class="brand" aria-label="VidPlan">
           <span class="brand-name">VidPlan</span>
         </router-link>
         <nav class="top-links">
-          <a href="#features">功能</a>
-          <a href="#how">如何工作</a>
+          <a href="#features" @click.prevent="scrollToSection('features')">功能</a>
+          <a href="#how" @click.prevent="scrollToSection('how')">如何工作</a>
         </nav>
         <div class="actions">
           <template v-if="!auth.isLoggedIn">
@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <section class="hero">
+    <section class="hero" data-home-snap>
       <h1 class="hero-title">把你的想法<br/>变成可执行的短视频方案</h1>
       <p class="hero-sub">
         从方向选择、脚本分镜、人设沉淀,到系列内容规划。<br/>
@@ -27,7 +27,7 @@
       </p>
     </section>
 
-    <section id="features" class="features">
+    <section id="features" class="features" data-home-snap>
       <div class="section-head">
         <h2>专注创作前的关键工作</h2>
         <p>不取代创作者,而是让结构化的事情快十倍。</p>
@@ -43,7 +43,7 @@
       </div>
     </section>
 
-    <section id="how" class="how">
+    <section id="how" class="how" data-home-snap>
       <div class="section-head">
         <h2>三步从灵感到完整方案</h2>
         <p>每一步都可以独立修改、迭代,直到你满意为止。</p>
@@ -57,7 +57,7 @@
       </ol>
     </section>
 
-    <footer class="foot">
+    <footer class="foot" data-home-snap>
       <span>© {{ year }} VidPlan</span>
       <span class="foot-meta">为短视频创作者打造</span>
     </footer>
@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   Connection,
   Edit,
@@ -76,8 +76,16 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const homeRef = ref<HTMLElement | null>(null)
 
 const year = computed(() => new Date().getFullYear())
+
+let activeSnapIndex = 0
+let isSnapping = false
+let snapTimer: number | undefined
+let snapUnlockTimer: number | undefined
+let snapMedia: MediaQueryList | undefined
+let reduceMotionMedia: MediaQueryList | undefined
 
 const features = [
   { icon: MagicStick,    title: '一句话生成方案', desc: '描述想法,AI 直接产出标题、定位、脚本、分镜、剪辑建议。' },
@@ -91,6 +99,118 @@ const steps = [
   { title: 'AI 生成首版方案', desc: '10-30 秒拿到完整结构化方案,包含分镜与提示词。' },
   { title: '编辑确认 · 导出',  desc: '逐字段微调,导出为 Markdown 或 Word,直接进入拍摄。' },
 ]
+
+interface SnapTarget {
+  id: string
+  top: number
+}
+
+function shouldSnap(): boolean {
+  return Boolean(snapMedia?.matches && !reduceMotionMedia?.matches)
+}
+
+function getTopbarHeight(): number {
+  return homeRef.value?.querySelector<HTMLElement>('.topbar')?.offsetHeight ?? 0
+}
+
+function getSnapTargets(): SnapTarget[] {
+  const root = homeRef.value
+  if (!root) return []
+
+  const topbarHeight = getTopbarHeight()
+  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('[data-home-snap]'))
+  const targets = elements.map((el, index) => ({
+    id: el.id,
+    top: Math.min(maxScroll, Math.max(0, index === 0 ? 0 : el.offsetTop - topbarHeight)),
+  }))
+
+  return targets.filter((target, index) => index === 0 || Math.abs(target.top - targets[index - 1].top) > 4)
+}
+
+function getNearestSnapIndex(targets: SnapTarget[], top = window.scrollY): number {
+  if (!targets.length) return 0
+  return targets.reduce((nearest, target, index) => {
+    const nearestDistance = Math.abs(targets[nearest].top - top)
+    const targetDistance = Math.abs(target.top - top)
+    return targetDistance < nearestDistance ? index : nearest
+  }, 0)
+}
+
+function snapToIndex(index: number, behavior: ScrollBehavior = 'smooth') {
+  const targets = getSnapTargets()
+  if (!targets.length) return
+
+  const targetIndex = Math.min(Math.max(index, 0), targets.length - 1)
+  activeSnapIndex = targetIndex
+  isSnapping = true
+  window.clearTimeout(snapUnlockTimer)
+  window.scrollTo({ top: targets[targetIndex].top, behavior })
+  snapUnlockTimer = window.setTimeout(() => {
+    isSnapping = false
+  }, behavior === 'smooth' ? 620 : 0)
+}
+
+function snapAfterScroll() {
+  if (!shouldSnap() || isSnapping) return
+
+  const targets = getSnapTargets()
+  if (targets.length < 2) return
+
+  if (!targets[activeSnapIndex]) {
+    activeSnapIndex = getNearestSnapIndex(targets)
+  }
+
+  const currentTop = targets[activeSnapIndex].top
+  const delta = window.scrollY - currentTop
+  const threshold = window.innerHeight * 0.5
+
+  if (Math.abs(delta) > window.innerHeight * 1.25) {
+    snapToIndex(getNearestSnapIndex(targets))
+  } else if (delta > threshold && activeSnapIndex < targets.length - 1) {
+    snapToIndex(activeSnapIndex + 1)
+  } else if (delta < -threshold && activeSnapIndex > 0) {
+    snapToIndex(activeSnapIndex - 1)
+  } else {
+    snapToIndex(activeSnapIndex)
+  }
+}
+
+function scheduleSnap() {
+  if (!shouldSnap() || isSnapping) return
+  window.clearTimeout(snapTimer)
+  snapTimer = window.setTimeout(snapAfterScroll, 120)
+}
+
+function handleResize() {
+  const targets = getSnapTargets()
+  activeSnapIndex = getNearestSnapIndex(targets)
+  if (shouldSnap()) snapToIndex(activeSnapIndex, 'auto')
+}
+
+function scrollToSection(id: string) {
+  const targets = getSnapTargets()
+  const targetIndex = targets.findIndex((target) => target.id === id)
+  if (targetIndex >= 0) {
+    snapToIndex(targetIndex)
+    window.history.replaceState(null, '', `#${id}`)
+  }
+}
+
+onMounted(() => {
+  snapMedia = window.matchMedia('(min-width: 900px)')
+  reduceMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
+  activeSnapIndex = getNearestSnapIndex(getSnapTargets())
+  window.addEventListener('scroll', scheduleSnap, { passive: true })
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(snapTimer)
+  window.clearTimeout(snapUnlockTimer)
+  window.removeEventListener('scroll', scheduleSnap)
+  window.removeEventListener('resize', handleResize)
+})
 
 </script>
 
