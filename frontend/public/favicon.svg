@@ -1,0 +1,74 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">VidPlan icon-only rose logo</title>
+  <desc id="desc">A text-free vector logo combining a video play frame with a planning timeline, using rose and light brown tones.</desc>
+
+  <defs>
+    <linearGradient id="roseFrame" x1="170" y1="260" x2="854" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C95F68"/>
+      <stop offset="0.46" stop-color="#D7837F"/>
+      <stop offset="0.75" stop-color="#E8B79D"/>
+      <stop offset="1" stop-color="#B99A8D"/>
+    </linearGradient>
+
+    <linearGradient id="rosePlay" x1="432" y1="360" x2="632" y2="590" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C96A72"/>
+      <stop offset="1" stop-color="#E1A08E"/>
+    </linearGradient>
+
+    <linearGradient id="timeline" x1="245" y1="735" x2="780" y2="735" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C65B64"/>
+      <stop offset="0.5" stop-color="#E7B39A"/>
+      <stop offset="1" stop-color="#B89B90"/>
+    </linearGradient>
+
+    <filter id="softShadow" x="120" y="205" width="790" height="650" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#9C6E68" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#FFFDFC"/>
+
+  <g filter="url(#softShadow)">
+    <!-- Main rounded video/planning frame -->
+    <path
+      d="M496 255H288C229.458 255 182 302.458 182 361V557C182 614.438 228.562 661 286 661H408C443.346 661 474.359 684.568 484 718"
+      stroke="url(#roseFrame)"
+      stroke-width="72"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <path
+      d="M528 255H736C794.542 255 842 302.458 842 361V557C842 614.438 795.438 661 738 661H612C576.654 661 545.641 684.568 536 718"
+      stroke="url(#roseFrame)"
+      stroke-width="72"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Left planning list markers -->
+    <rect x="267" y="333" width="58" height="46" rx="10" fill="#C76B72"/>
+    <rect x="267" y="421" width="58" height="46" rx="10" fill="#CF7A7C"/>
+    <rect x="267" y="509" width="58" height="46" rx="10" fill="#D58A83"/>
+
+    <!-- Play symbol -->
+    <path
+      d="M445 368C445 355.789 458.38 348.304 468.798 354.674L623.756 449.408C633.706 455.489 633.706 469.911 623.756 475.992L468.798 570.726C458.38 577.096 445 569.611 445 557.4V368Z"
+      fill="url(#rosePlay)"
+    />
+
+    <!-- Timeline connectors -->
+    <path
+      d="M288 661V735H512V661M736 661V735H512"
+      stroke="url(#timeline)"
+      stroke-width="44"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Timeline nodes -->
+    <circle cx="288" cy="735" r="54" fill="#C65B64"/>
+    <circle cx="512" cy="735" r="54" fill="#E7B39A"/>
+    <circle cx="736" cy="735" r="54" fill="#B89B90"/>
+  </g>
+</svg>
