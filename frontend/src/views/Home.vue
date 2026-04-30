@@ -84,6 +84,7 @@ let activeSnapIndex = 0
 let isSnapping = false
 let snapTimer: number | undefined
 let snapUnlockTimer: number | undefined
+let snapFrame: number | undefined
 let snapMedia: MediaQueryList | undefined
 let reduceMotionMedia: MediaQueryList | undefined
 
@@ -145,10 +146,42 @@ function snapToIndex(index: number, behavior: ScrollBehavior = 'smooth') {
   activeSnapIndex = targetIndex
   isSnapping = true
   window.clearTimeout(snapUnlockTimer)
-  window.scrollTo({ top: targets[targetIndex].top, behavior })
-  snapUnlockTimer = window.setTimeout(() => {
+  scrollToTop(targets[targetIndex].top, behavior, () => {
     isSnapping = false
-  }, behavior === 'smooth' ? 620 : 0)
+  })
+}
+
+function scrollToTop(top: number, behavior: ScrollBehavior, onDone: () => void) {
+  if (snapFrame) window.cancelAnimationFrame(snapFrame)
+
+  if (behavior === 'auto') {
+    window.scrollTo({ top, behavior: 'auto' })
+    onDone()
+    return
+  }
+
+  const startTop = window.scrollY
+  const distance = top - startTop
+  const duration = 920
+  const startedAt = window.performance.now()
+
+  function step(now: number) {
+    const elapsed = Math.min((now - startedAt) / duration, 1)
+    const eased = elapsed < 0.5
+      ? 4 * elapsed * elapsed * elapsed
+      : 1 - Math.pow(-2 * elapsed + 2, 3) / 2
+
+    window.scrollTo(0, startTop + distance * eased)
+
+    if (elapsed < 1) {
+      snapFrame = window.requestAnimationFrame(step)
+    } else {
+      snapFrame = undefined
+      onDone()
+    }
+  }
+
+  snapFrame = window.requestAnimationFrame(step)
 }
 
 function snapAfterScroll() {
@@ -179,7 +212,7 @@ function snapAfterScroll() {
 function scheduleSnap() {
   if (!shouldSnap() || isSnapping) return
   window.clearTimeout(snapTimer)
-  snapTimer = window.setTimeout(snapAfterScroll, 120)
+  snapTimer = window.setTimeout(snapAfterScroll, 180)
 }
 
 function handleResize() {
@@ -208,6 +241,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.clearTimeout(snapTimer)
   window.clearTimeout(snapUnlockTimer)
+  if (snapFrame) window.cancelAnimationFrame(snapFrame)
   window.removeEventListener('scroll', scheduleSnap)
   window.removeEventListener('resize', handleResize)
 })
