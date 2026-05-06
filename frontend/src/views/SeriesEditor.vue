@@ -1009,10 +1009,15 @@ function isAbortError(err: unknown) {
 <style scoped>
 .series-editor { padding: 28px 32px 36px; max-width: 1280px; margin: 0 auto; }
 .head {
+  position: sticky;
+  top: var(--vp-topbar-h);
+  z-index: 8;
   display: flex; justify-content: space-between; align-items: flex-start;
   gap: 16px; margin-bottom: 20px;
   padding: 12px 0 16px;
   border-bottom: 1px solid var(--vp-divider);
+  background: color-mix(in srgb, var(--vp-bg) 90%, transparent);
+  backdrop-filter: blur(14px);
 }
 .head h2 { margin: 0 0 4px; }
 .head-actions { display: flex; gap: 10px; }
@@ -1140,7 +1145,6 @@ function isAbortError(err: unknown) {
 @media (max-width: 720px) {
   .series-editor { padding: 18px 16px 28px; }
   .head {
-    position: static;
     flex-direction: column;
     align-items: stretch;
   }

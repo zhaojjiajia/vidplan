@@ -535,7 +535,6 @@ function onLogout() {
   .nav-item.active::before { display: none; }
   .workspace-topbar {
     padding: 10px 16px;
-    position: static;
   }
   .workspace-state { display: none; }
 }
