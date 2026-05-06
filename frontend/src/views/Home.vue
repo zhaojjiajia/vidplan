@@ -44,23 +44,24 @@
     </section>
 
     <section id="how" class="how" data-home-snap>
-      <div class="section-head">
-        <h2>三步从灵感到完整方案</h2>
-        <p>每一步都可以独立修改、迭代,直到你满意为止。</p>
+      <div class="how-content">
+        <div class="section-head">
+          <h2>三步从灵感到完整方案</h2>
+          <p>每一步都可以独立修改、迭代,直到你满意为止。</p>
+        </div>
+        <ol class="steps">
+          <li v-for="(s, i) in steps" :key="s.title">
+            <div class="step-num">{{ String(i + 1).padStart(2, '0') }}</div>
+            <h4>{{ s.title }}</h4>
+            <p>{{ s.desc }}</p>
+          </li>
+        </ol>
       </div>
-      <ol class="steps">
-        <li v-for="(s, i) in steps" :key="s.title">
-          <div class="step-num">{{ String(i + 1).padStart(2, '0') }}</div>
-          <h4>{{ s.title }}</h4>
-          <p>{{ s.desc }}</p>
-        </li>
-      </ol>
+      <footer class="foot">
+        <span>© {{ year }} VidPlan</span>
+        <span class="foot-meta">为短视频创作者打造</span>
+      </footer>
     </section>
-
-    <footer class="foot" data-home-snap>
-      <span>© {{ year }} VidPlan</span>
-      <span class="foot-meta">为短视频创作者打造</span>
-    </footer>
   </div>
 </template>
 
@@ -321,7 +322,15 @@ onBeforeUnmount(() => {
 .section-head h2 { font-size: 38px; letter-spacing: 0; margin-bottom: 8px; }
 .section-head p  { color: var(--vp-text-3); font-size: 20px; }
 
-.features { padding: 138px 24px 80px; max-width: 1180px; margin: 0 auto; }
+.features {
+  min-height: calc(100vh - 67px);
+  padding: 74px 24px 60px;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 .feature-grid {
   display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -351,7 +360,19 @@ onBeforeUnmount(() => {
 .feature p { font-size: 18px; color: var(--vp-text-3); line-height: 1.55; }
 
 /* ----- How ----- */
-.how { padding: 40px 24px 96px; max-width: 1180px; margin: 0 auto; }
+.how {
+  min-height: calc(100vh - 67px);
+  padding: 72px 24px 26px;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.how-content {
+  width: 100%;
+  margin: auto 0;
+}
 .steps {
   list-style: none; padding: 0; margin: 0;
   display: grid; gap: 16px;
@@ -376,7 +397,8 @@ onBeforeUnmount(() => {
 /* ----- Foot ----- */
 .foot {
   border-top: 1px solid var(--vp-divider);
-  padding: 24px 40px;
+  padding: 22px 0 0;
+  margin-top: 42px;
   display: flex; justify-content: space-between;
   font-size: 16px; color: var(--vp-text-3);
 }
@@ -387,8 +409,14 @@ onBeforeUnmount(() => {
   .hero { min-height: calc(100vh - 61px); padding: 54px 20px; }
   .hero-title { font-size: 46px; line-height: 1.22; margin-bottom: 42px; top: -34px; }
   .hero-sub { font-size: 20px; line-height: 1.85; }
-  .features { padding: 112px 20px 80px; }
-  .how { padding-left: 20px; padding-right: 20px; }
-  .foot { flex-direction: column; gap: 6px; padding: 22px 24px; }
+  .features {
+    min-height: auto;
+    padding: 112px 20px 80px;
+  }
+  .how {
+    min-height: auto;
+    padding: 40px 20px 0;
+  }
+  .foot { flex-direction: column; gap: 6px; padding: 22px 0; }
 }
 </style>

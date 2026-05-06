@@ -1013,11 +1013,6 @@ function isAbortError(err: unknown) {
   gap: 16px; margin-bottom: 20px;
   padding: 12px 0 16px;
   border-bottom: 1px solid var(--vp-divider);
-  position: sticky;
-  top: var(--vp-topbar-h);
-  z-index: 8;
-  background: color-mix(in srgb, var(--vp-bg) 92%, transparent);
-  backdrop-filter: blur(12px);
 }
 .head h2 { margin: 0 0 4px; }
 .head-actions { display: flex; gap: 10px; }

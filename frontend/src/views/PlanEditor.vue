@@ -487,11 +487,6 @@ function isAbortError(err: unknown) {
   margin-bottom: 20px;
   padding: 12px 0 16px;
   border-bottom: 1px solid var(--vp-divider);
-  position: sticky;
-  top: var(--vp-topbar-h);
-  z-index: 8;
-  background: color-mix(in srgb, var(--vp-bg) 92%, transparent);
-  backdrop-filter: blur(12px);
 }
 .title-input { padding: 0; }
 .title-input :deep(.el-input__wrapper) {
