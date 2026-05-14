@@ -20,7 +20,7 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   getters: {
-    isLoggedIn: (s) => !!s.accessToken,
+    isLoggedIn: (s) => !!s.refreshToken,
   },
 
   actions: {
@@ -34,7 +34,25 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async fetchMe() {
-      this.user = await authApi.me()
+      try {
+        this.user = await authApi.me()
+      } catch (err) {
+        if (!this.refreshToken) throw err
+        await this.refreshAccessToken()
+        this.user = await authApi.me()
+      }
+    },
+
+    setAccessToken(access: string) {
+      this.accessToken = access
+      localStorage.setItem(ACCESS_KEY, access)
+    },
+
+    async refreshAccessToken() {
+      if (!this.refreshToken) throw new Error('缺少刷新令牌')
+      const tokens = await authApi.refresh(this.refreshToken)
+      this.setAccessToken(tokens.access)
+      return tokens.access
     },
 
     logout() {

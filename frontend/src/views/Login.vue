@@ -44,7 +44,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(form.username, form.password)
-    const redirect = (route.query.redirect as string) || '/app/me/plans'
+    const redirect = (route.query.redirect as string) || '/app/plan/new'
     router.push(redirect)
   } finally {
     loading.value = false

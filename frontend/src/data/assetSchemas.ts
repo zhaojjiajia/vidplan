@@ -13,6 +13,8 @@ export interface AssetSchema {
   title: string
   desc: string
   fields: AssetField[]
+  /** Allowed labels for the per-image dropdown in the image gallery. */
+  imageLabels: string[]
 }
 
 export const ASSET_SCHEMAS: Record<AssetType, AssetSchema> = {
@@ -25,6 +27,7 @@ export const ASSET_SCHEMAS: Record<AssetType, AssetSchema> = {
       { key: 'personality', label: '性格', kind: 'textarea', placeholder: '关键人格关键词、说话风格' },
       { key: 'voice', label: '声音 / 语气', kind: 'text', placeholder: '声线、口头禅、语速' },
     ],
+    imageLabels: ['正面', '侧面', '背面', '表情', '服装', '道具', '其他'],
   },
   styles: {
     title: '风格资产',
@@ -35,15 +38,15 @@ export const ASSET_SCHEMAS: Record<AssetType, AssetSchema> = {
       { key: 'music', label: '音乐风格', kind: 'text', placeholder: '类型、BPM、参考曲目' },
       { key: 'color', label: '色彩 / 调色', kind: 'text', placeholder: '主色调、滤镜参考' },
     ],
+    imageLabels: ['情绪板', '配色', '构图', '光线', '其他'],
   },
   worldviews: {
-    title: '世界观资产',
-    desc: '保存故事背景、规则、地点、时间线和核心冲突。',
+    title: '环境资产',
+    desc: '保存环境名称、影调色彩和不可改变的固定特征。',
     fields: [
-      { key: 'background', label: '故事背景', kind: 'textarea', placeholder: '世界设定、时间、核心矛盾' },
-      { key: 'rules', label: '世界规则 (每行一条)', kind: 'lines', placeholder: '魔法守则、能力上限、禁忌…' },
-      { key: 'locations', label: '关键地点 (每行一条)', kind: 'lines', placeholder: '主城、秘境、日常场景…' },
+      { key: 'tone_color', label: '影调与色彩', kind: 'textarea', placeholder: '例如:傍晚暖光、低饱和绿色、轻雾感' },
     ],
+    imageLabels: ['场景', '地标', '物品', '服饰', '其他'],
   },
   columns: {
     title: '栏目资产',
@@ -53,5 +56,6 @@ export const ASSET_SCHEMAS: Record<AssetType, AssetSchema> = {
       { key: 'title_formula', label: '标题套路', kind: 'textarea', placeholder: '例如:数字 + 痛点 + 反转' },
       { key: 'cadence', label: '发布节奏', kind: 'text', placeholder: '日更 / 周三五更 / 每月 8 条' },
     ],
+    imageLabels: ['封面', '字效', '转场', '其他'],
   },
 }

@@ -16,18 +16,9 @@
           placeholder="例如:校园悬疑短剧,主角是转校生,每集留下一个谜题"
         />
       </el-form-item>
-      <el-row :gutter="12">
-        <el-col :span="12">
-          <el-form-item label="目标平台">
-            <el-input v-model="form.target_platform" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="更新频率">
-            <el-input v-model="form.update_frequency" placeholder="日更 / 周更" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <el-form-item label="更新频率">
+        <el-input v-model="form.update_frequency" placeholder="日更 / 周更" />
+      </el-form-item>
       <el-row :gutter="12">
         <el-col :span="8">
           <el-form-item label="单集时长 (秒)">
@@ -56,7 +47,6 @@
       <template #title>
         <div class="task-title">
           <span>{{ taskMessage }}</span>
-          <el-progress :percentage="taskProgress" :stroke-width="6" class="task-progress" />
         </div>
       </template>
     </el-alert>
@@ -104,7 +94,7 @@ let taskAbortController: AbortController | null = null
 const form = reactive<SeriesGenerateInput>({
   direction: 'ai_short_drama',
   idea: '',
-  target_platform: '抖音',
+  target_platform: '',
   target_audience: '',
   update_frequency: '周更',
   episode_duration_seconds: 60,
@@ -211,7 +201,6 @@ function isAbortError(err: unknown) {
 <style scoped>
 .task-alert { margin-top: 16px; }
 .task-title { display: flex; align-items: center; gap: 12px; width: 100%; }
-.task-progress { width: 220px; flex-shrink: 0; }
 
 @media (max-width: 640px) {
   :deep(.el-dialog) {
@@ -225,6 +214,5 @@ function isAbortError(err: unknown) {
     flex-direction: column;
     align-items: stretch;
   }
-  .task-progress { width: 100%; }
 }
 </style>

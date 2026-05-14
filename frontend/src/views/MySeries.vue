@@ -6,6 +6,9 @@
         <p>管理系列定位、更新节奏、关联资产和选题池。</p>
       </div>
       <div class="actions">
+        <el-button type="primary" :icon="Plus" @click="createManualSeries">
+          新建系列
+        </el-button>
         <el-input
           v-model="search"
           class="search"
@@ -13,40 +16,16 @@
           placeholder="搜索系列标题、简介"
           :prefix-icon="Search"
         />
-        <el-button :icon="MagicStick" type="success" @click="aiDialogOpen = true">AI 生成系列</el-button>
-        <el-button type="primary" :icon="Plus" @click="router.push('/app/series/new')">新建系列</el-button>
       </div>
     </header>
-
-    <SeriesGenerateDialog v-model="aiDialogOpen" @created="onAiCreated" />
-
-    <div v-if="list.length > 0" class="list-toolbar vp-toolbar">
-      <el-radio-group v-model="statusFilter" size="small">
-        <el-radio-button v-for="item in statusOptions" :key="item.value" :label="item.value">
-          {{ item.label }}
-        </el-radio-button>
-      </el-radio-group>
-      <div class="toolbar-right">
-        <el-select v-model="sortBy" size="small" class="sort-select">
-          <el-option label="最近更新" value="updated" />
-          <el-option label="标题 A-Z" value="title" />
-          <el-option label="单集最多" value="episodes" />
-        </el-select>
-        <span class="result-count">显示 {{ filteredSeries.length }} / {{ list.length }} 个系列</span>
-      </div>
-    </div>
 
     <CardSkeleton v-if="loading && list.length === 0" :count="6" />
 
     <EmptyState
       v-else-if="list.length === 0"
       title="还没有系列方案"
-      description="系列把人设、风格、栏目长期沉淀,后续每集都能保持一致。"
-    >
-      <template #action>
-        <el-button :icon="MagicStick" type="success" @click="aiDialogOpen = true">AI 生成系列</el-button>
-      </template>
-    </EmptyState>
+      description="可以手工新建系列,也可以从创建页使用 AI 生成。"
+    />
 
     <EmptyState
       v-else-if="filteredSeries.length === 0"
@@ -72,7 +51,6 @@
 
         <div class="meta">
           <span class="meta-pill">{{ findDirectionLabel(series.direction) }}</span>
-          <span class="meta-pill subtle">{{ series.target_platform || '未设平台' }}</span>
           <span class="meta-pill subtle">{{ series.episode_count }} 集</span>
         </div>
 
@@ -81,7 +59,6 @@
         <footer class="foot" @click.stop>
           <span class="time">{{ formatDate(series.updated_at) }}</span>
           <div class="row-actions">
-            <el-button text type="primary" size="small" @click="open(series.id)">编辑</el-button>
             <el-dropdown trigger="click" @command="(cmd: 'export' | 'remove') => onCommand(cmd, series)">
               <el-button text size="small">
                 更多<el-icon class="el-icon--right"><MoreFilled /></el-icon>
@@ -117,13 +94,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { MagicStick, MoreFilled, Plus, Search } from '@element-plus/icons-vue'
+import { MoreFilled, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { seriesApi, type SeriesExportFormat } from '@/api/series'
 import CardSkeleton from '@/components/CardSkeleton.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import SeriesGenerateDialog from '@/components/SeriesGenerateDialog.vue'
 import { findDirectionLabel } from '@/data/directions'
 import type { SeriesPlan } from '@/types/api'
 
@@ -131,46 +107,24 @@ const router = useRouter()
 const loading = ref(false)
 const list = ref<SeriesPlan[]>([])
 const search = ref('')
-const statusFilter = ref<'all' | SeriesPlan['status']>('all')
-const sortBy = ref<'updated' | 'title' | 'episodes'>('updated')
-const aiDialogOpen = ref(false)
 const exportDialogOpen = ref(false)
 const exporting = ref(false)
 const exportTarget = ref<SeriesPlan | null>(null)
 const exportFormat = ref<SeriesExportFormat>('md')
 
-const statusOptions = [
-  { label: '全部', value: 'all' },
-  { label: '草稿', value: 'draft' },
-  { label: '连载中', value: 'ongoing' },
-  { label: '已暂停', value: 'paused' },
-  { label: '已完成', value: 'completed' },
-] as const
-
 const filteredSeries = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   const matched = list.value.filter((series) => {
-    const statusMatched = statusFilter.value === 'all' || series.status === statusFilter.value
-    if (!statusMatched) return false
     if (!keyword) return true
     const haystack = [
       series.title,
       series.summary,
-      series.target_platform,
       findDirectionLabel(series.direction),
     ].join(' ').toLowerCase()
     return haystack.includes(keyword)
   })
-  return [...matched].sort((a, b) => {
-    if (sortBy.value === 'title') return (a.title || '').localeCompare(b.title || '', 'zh-Hans-CN')
-    if (sortBy.value === 'episodes') return (b.episode_count || 0) - (a.episode_count || 0)
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  })
+  return [...matched].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
 })
-
-function onAiCreated(series: SeriesPlan) {
-  router.push(`/app/series/${series.id}`)
-}
 
 onMounted(load)
 
@@ -186,6 +140,10 @@ async function load() {
 
 function open(id: string) {
   router.push(`/app/series/${id}`)
+}
+
+function createManualSeries() {
+  router.push('/app/series/new')
 }
 
 function onCommand(cmd: 'export' | 'remove', series: SeriesPlan) {
@@ -245,29 +203,20 @@ function formatDate(iso: string) {
 <style scoped>
 .actions { display: flex; gap: 10px; align-items: center; }
 .search { width: 240px; }
-.list-toolbar {
-  margin: -2px 0 18px;
-}
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.sort-select { width: 120px; }
-.result-count { color: var(--vp-text-3); font-size: 12.5px; white-space: nowrap; }
 
 .series-card {
-  background: var(--vp-surface);
-  border: 1px solid var(--vp-border);
+  background: rgba(255, 255, 255, .48);
+  border: 1px solid rgba(94, 78, 70, .11);
   border-radius: var(--vp-r-lg);
   padding: 16px 16px 12px;
   display: flex; flex-direction: column;
   cursor: pointer;
   transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
   height: 100%;
-  min-height: 190px;
+  min-height: 160px;
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(18px) saturate(138%);
   animation: vp-fade-up .35s ease both;
 }
 .series-card::before {
@@ -297,8 +246,8 @@ function formatDate(iso: string) {
 }
 .series-card:hover::before { opacity: 1; }
 .series-card:hover {
-  border-color: var(--vp-border-strong);
-  box-shadow: var(--vp-shadow-md);
+  border-color: color-mix(in srgb, var(--vp-primary) 32%, rgba(94, 78, 70, .11));
+  box-shadow: 0 18px 42px rgba(84, 40, 36, .10);
   transform: translateY(-2px);
 }
 .series-card:active { transform: translateY(-1px); }
@@ -343,15 +292,11 @@ function formatDate(iso: string) {
 .export-options { width: 100%; display: flex; justify-content: center; }
 
 @media (max-width: 820px) {
-  .actions,
-  .toolbar-right,
-  .list-toolbar {
+  .actions {
     flex-direction: column;
     align-items: stretch;
   }
   .search { width: 100%; }
-  .sort-select { width: 100%; }
-  .result-count { white-space: normal; }
 }
 
 @media (max-width: 560px) {

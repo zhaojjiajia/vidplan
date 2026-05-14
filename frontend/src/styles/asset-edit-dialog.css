@@ -1,0 +1,140 @@
+/*
+ * Borderless input styling for the resource-edit dialog.
+ * el-dialog content teleports out of the component tree, so component-scoped
+ * CSS can't reach it. Loaded globally via main.ts; gated on the
+ * `.asset-edit-dialog` class that AssetLibrary / CustomAssetLibrary forward
+ * onto their <el-dialog> wrappers.
+ */
+
+.asset-edit-dialog .aed-gallery-item {
+  margin-bottom: 16px;
+}
+.asset-edit-dialog .aed-gallery-item .el-form-item__label {
+  display: none;
+}
+
+.asset-edit-dialog .el-form-item {
+  margin-bottom: 14px !important;
+}
+.asset-edit-dialog .el-form-item:last-child {
+  margin-bottom: 0 !important;
+}
+.asset-edit-dialog .el-form-item__label {
+  font-size: 14px !important;
+  color: var(--vp-text-1, #1f2937);
+  font-weight: 600;
+  padding-bottom: 4px !important;
+  line-height: 1.4 !important;
+}
+
+/* Single-line el-input — borderless to match textareas. ElementPlus paints
+   the border via box-shadow inset on `.el-input__wrapper`, so that's the
+   one we have to override. */
+.asset-edit-dialog .el-input__wrapper {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 6px 0 !important;
+}
+.asset-edit-dialog .el-input__wrapper.is-focus {
+  background: rgba(0, 0, 0, 0.025) !important;
+  box-shadow: none !important;
+  border-radius: 4px;
+}
+.asset-edit-dialog .el-input__inner {
+  font-size: 15px !important;
+  color: var(--vp-text-1, #1f2937) !important;
+  line-height: 1.5 !important;
+}
+.asset-edit-dialog .el-input__inner::placeholder {
+  color: var(--vp-text-4, #d1d5db);
+  font-size: 14px;
+}
+
+.asset-edit-dialog .el-textarea__inner {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 6px 0 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+  color: var(--vp-text-1, #1f2937);
+  resize: none;
+  font-family: inherit;
+  overflow-y: hidden !important;
+  min-height: 28px !important;
+}
+.asset-edit-dialog .el-textarea__inner:focus {
+  background: rgba(0, 0, 0, 0.025) !important;
+  border-radius: 4px;
+}
+.asset-edit-dialog .el-textarea__inner::placeholder {
+  color: var(--vp-text-4, #d1d5db);
+  font-size: 14px;
+}
+
+/*
+ * "字段 / 值"双列表格 — 资料卡式的紧凑布局。
+ * 设计:
+ *  · 外面套圆角边框,看着像一个独立"档案卡片",不再散乱地散落在 dialog 里
+ *  · 字段名一列用极淡的米色背景,做视觉节奏(避免左侧空荡)
+ *  · 行间用细分隔线,hover 时整行轻微高亮,有可交互感
+ *  · 字段名小一档(13px) + 字距放宽 + 中性灰,让"值"列的输入在视觉上更突出
+ */
+.asset-edit-dialog .aed-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  border: 1px solid var(--vp-border, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--vp-surface, #fff);
+  margin: 4px 0;
+}
+.asset-edit-dialog .aed-table th,
+.asset-edit-dialog .aed-table td {
+  padding: 14px 20px;
+  vertical-align: top;
+  text-align: left;
+  border-bottom: 1px solid var(--vp-divider, #f3f4f6);
+}
+.asset-edit-dialog .aed-table tr:last-child th,
+.asset-edit-dialog .aed-table tr:last-child td {
+  border-bottom: none;
+}
+.asset-edit-dialog .aed-table th {
+  width: 120px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vp-text-2, #4b5563);
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--vp-surface-alt, #f9fafb) 70%, transparent);
+  border-right: 1px solid var(--vp-divider, #f3f4f6);
+  padding-top: 18px;
+}
+.asset-edit-dialog .aed-table td {
+  font-size: 16px;
+  color: var(--vp-text-1, #1f2937);
+}
+/* Inputs inside table cells: drop wrapper padding so they align with the
+   row baseline (cell already supplies horizontal padding). Bump font sizes
+   one tier above the global rule so the table values read clearly. */
+.asset-edit-dialog .aed-table .el-input__wrapper,
+.asset-edit-dialog .aed-table .el-textarea__inner {
+  padding: 4px 0 !important;
+  background: transparent !important;
+}
+.asset-edit-dialog .aed-table .el-input__inner {
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+}
+.asset-edit-dialog .aed-table .el-textarea__inner {
+  font-size: 16px !important;
+  line-height: 1.65 !important;
+}
+.asset-edit-dialog .aed-table .el-input__wrapper.is-focus,
+.asset-edit-dialog .aed-table .el-textarea__inner:focus {
+  background: transparent !important;
+  box-shadow: none !important;
+}

@@ -11,10 +11,10 @@
         </nav>
         <div class="actions">
           <template v-if="!auth.isLoggedIn">
-            <el-button text @click="$router.push('/login')">登录</el-button>
-            <el-button type="primary" @click="$router.push('/register')">免费试用</el-button>
+            <button type="button" class="top-action" @click="$router.push('/login')">登录</button>
+            <button type="button" class="top-action" @click="$router.push('/register')">注册</button>
           </template>
-          <el-button v-else type="primary" @click="$router.push('/app/me/plans')">进入工作台</el-button>
+          <button v-else type="button" class="top-action" @click="$router.push('/app/me/plans')">进入工作台</button>
         </div>
       </div>
     </header>
@@ -90,7 +90,7 @@ let snapMedia: MediaQueryList | undefined
 let reduceMotionMedia: MediaQueryList | undefined
 
 const features = [
-  { icon: MagicStick,    title: '一句话生成方案', desc: '描述想法,AI 直接产出标题、定位、脚本、分镜、剪辑建议。' },
+  { icon: MagicStick,    title: '一句话生成方案', desc: '描述想法,AI 直接产出标题、定位、章节脚本和交付建议。' },
   { icon: Edit,          title: '所见即所得编辑', desc: '结构化字段实时编辑,自动保存。AI 优化按 scope 精准更新。' },
   { icon: Connection,    title: '系列与资产复用', desc: '人设、风格、栏目长期沉淀,系列每集都自动一致。' },
   { icon: TrendCharts,   title: '一致性自动审核', desc: 'AI 检查每一集与系列设定的偏差,给出修复建议。' },
@@ -98,7 +98,7 @@ const features = [
 
 const steps = [
   { title: '选方向 · 写想法', desc: '从大类与具体方向入手,再用一两句话描述创作意图。' },
-  { title: 'AI 生成首版方案', desc: '10-30 秒拿到完整结构化方案,包含分镜与提示词。' },
+  { title: 'AI 生成首版方案', desc: '先拿到完整章节方案,再按章节补充或生成分镜。' },
   { title: '编辑确认 · 导出',  desc: '逐字段微调,导出为 Markdown 或 Word,直接进入拍摄。' },
 ]
 
@@ -282,7 +282,29 @@ onBeforeUnmount(() => {
   transition: color .12s ease;
 }
 .top-links a:hover { color: var(--vp-text-1); }
-.actions { display: flex; gap: 10px; }
+.actions { display: flex; gap: 18px; align-items: center; }
+.top-action {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  color: var(--vp-text-2);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+.top-action:hover,
+.top-action:active {
+  background: transparent;
+  color: var(--vp-text-2);
+  box-shadow: none;
+}
+.top-action:focus-visible {
+  outline: 2px solid var(--vp-primary);
+  outline-offset: 4px;
+}
 
 /* ----- Hero ----- */
 .hero {

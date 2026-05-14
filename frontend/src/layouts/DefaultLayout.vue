@@ -22,46 +22,50 @@
 
         <div class="nav-group">
           <div class="nav-label">工作台</div>
-          <NavItem
+          <a
             v-for="item in primaryNav"
             :key="item.path"
-            :path="item.path"
-            :label="item.label"
-            :icon="item.icon"
-            :active="isActive(item.path)"
-            :collapsed="collapsed"
-          />
+            :href="item.path"
+            :class="['nav-item', { active: isActive(item.path) }]"
+            :aria-current="isActive(item.path) ? 'page' : undefined"
+            :title="collapsed ? item.label : undefined"
+            @click.prevent="router.push(item.path)"
+          >
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <span v-if="!collapsed" class="nav-text">{{ item.label }}</span>
+          </a>
         </div>
 
         <div class="nav-group">
           <div class="nav-label">资产库</div>
-          <NavItem
+          <a
             v-for="item in assetNav"
             :key="item.path"
-            :path="item.path"
-            :label="item.label"
-            :icon="item.icon"
-            :active="isActive(item.path)"
-            :collapsed="collapsed"
-          />
+            :href="item.path"
+            :class="['nav-item', { active: isActive(item.path) }]"
+            :aria-current="isActive(item.path) ? 'page' : undefined"
+            :title="collapsed ? item.label : undefined"
+            @click.prevent="router.push(item.path)"
+          >
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <span v-if="!collapsed" class="nav-text">{{ item.label }}</span>
+          </a>
         </div>
 
         <div class="nav-group">
           <div class="nav-label">系统</div>
-          <NavItem
-            path="/app/settings/ai"
-            label="AI 设置"
-            :icon="Setting"
-            :active="isActive('/app/settings/ai')"
-            :collapsed="collapsed"
-          />
-          <NavItem
-            path="/app/garden"
-            label="赏花"
-            :icon="Cherry"
-            :active="isActive('/app/garden')"
-            :collapsed="collapsed"
-          />
+          <a
+            v-for="item in systemNav"
+            :key="item.path"
+            :href="item.path"
+            :class="['nav-item', { active: isActive(item.path) }]"
+            :aria-current="isActive(item.path) ? 'page' : undefined"
+            :title="collapsed ? item.label : undefined"
+            @click.prevent="router.push(item.path)"
+          >
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <span v-if="!collapsed" class="nav-text">{{ item.label }}</span>
+          </a>
         </div>
       </nav>
 
@@ -110,49 +114,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Avatar,
-  Box,
   Cherry,
-  Collection,
-  Compass,
   Document,
   Expand,
   Files,
   Fold,
+  MapLocation,
   Plus,
   Setting,
   SwitchButton,
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
-
-// 内联导航项，避免为一个小组件额外拆文件。
-const NavItem = (props: {
-  path: string
-  label: string
-  icon: any
-  active: boolean
-  collapsed: boolean
-}) =>
-  h(
-    'a',
-    {
-      href: props.path,
-      class: ['nav-item', { active: props.active }],
-      onClick: (e: Event) => {
-        e.preventDefault()
-        router.push(props.path)
-      },
-      'aria-current': props.active ? 'page' : undefined,
-    },
-    [
-      h('span', { class: 'nav-icon' }, [h(props.icon)]),
-      props.collapsed ? null : h('span', { class: 'nav-text' }, props.label),
-    ]
-  )
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -173,9 +150,13 @@ const primaryNav = [
 
 const assetNav = [
   { path: '/app/me/assets/characters', label: '人物', icon: Avatar },
-  { path: '/app/me/assets/styles',     label: '风格', icon: Compass },
-  { path: '/app/me/assets/worldviews', label: '世界观', icon: Box },
-  { path: '/app/me/assets/columns',    label: '栏目', icon: Collection },
+  { path: '/app/me/assets/worldviews', label: '环境', icon: MapLocation },
+  // 自定义类目入口暂时收掉(路由和后端都保留,以后想恢复改这一行就行)
+]
+
+const systemNav = [
+  { path: '/app/settings/ai', label: 'AI 设置', icon: Setting },
+  { path: '/app/garden',      label: '赏花',    icon: Cherry },
 ]
 
 function isActive(path: string) {
@@ -197,15 +178,18 @@ const workspaceTitle = computed(() => {
   if (route.name === 'my-plans') return '我的方案'
   if (route.name === 'my-series') return '我的系列'
   if (route.name === 'plan-new') return '创建方案'
-  if (route.name === 'plan-edit') return '方案编辑器'
+  if (route.name === 'plan-edit') return '方案编辑'
   if (route.name === 'series-new') return '新建系列'
-  if (route.name === 'series-edit') return '系列编辑器'
+  if (route.name === 'series-relationships') return '人物关系'
+  if (route.name === 'series-edit') return '系列编辑'
   if (route.name === 'ai-settings') return 'AI 设置'
   if (route.name === 'flower-garden') return '赏花'
   if (route.name === 'asset-characters') return '人物资产'
   if (route.name === 'asset-styles') return '风格资产'
-  if (route.name === 'asset-worldviews') return '世界观资产'
+  if (route.name === 'asset-worldviews') return '环境资产'
   if (route.name === 'asset-columns') return '栏目资产'
+  if (route.name === 'asset-kinds') return '自定义类目'
+  if (route.name === 'asset-custom') return '自定义资产'
   return 'VidPlan'
 })
 
@@ -306,26 +290,36 @@ function onLogout() {
   transition: background .12s ease, color .12s ease;
 }
 .nav-item:hover { background: var(--vp-surface-alt); color: var(--vp-text-1); }
+/* Active state: a subtle neutral fill, no left rail. The previous accent
+   rail + saturated primary background made the active item shout — user
+   wanted it quieter. */
 .nav-item.active {
-  background: var(--vp-primary-soft);
-  color: var(--vp-primary);
+  background: color-mix(in srgb, var(--vp-primary) 8%, transparent);
+  color: var(--vp-text-1);
 }
-.nav-item.active::before {
-  content: ""; position: absolute;
-  left: -12px; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 16px;
-  background: var(--vp-primary);
-  border-radius: 0 3px 3px 0;
-}
+/* el-icon sizes itself by font-size (its height/width default to 1em).
+   Setting font-size on `.nav-icon` is the canonical way to size the inner
+   svg rather than relying on :deep(svg) — that worked unreliably when the
+   nav was a functional component. */
 .nav-icon {
-  width: 16px; height: 16px;
-  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px;
   flex-shrink: 0;
-  color: var(--vp-text-3);
+  color: var(--vp-text-2);
 }
-.nav-item.active .nav-icon { color: var(--vp-primary); }
-.nav-icon :deep(svg) { width: 16px; height: 16px; }
+.nav-item.active .nav-icon { color: var(--vp-text-1); }
 .nav-text { white-space: nowrap; }
+
+/* When the sidebar is collapsed only the icon shows. Center it inside the
+   row, bump it up a touch, and switch to the darker text-1 color so the
+   icons read as actual UI rather than nearly-invisible faint glyphs. */
+.shell.collapsed .nav-item {
+  justify-content: center;
+  padding: 9px 0;
+}
+.shell.collapsed .nav-icon {
+  font-size: 20px;
+  color: var(--vp-text-1);
+}
 
 .nav-cta {
   width: 100%;

@@ -23,6 +23,7 @@ export interface VideoPlan {
   storyboard: StoryboardShot[]
   editing_advice: Record<string, unknown>
   ai_prompts: Record<string, unknown>
+  episode_order: number
   status: 'draft' | 'optimizing' | 'confirmed' | 'completed'
   created_at: string
   updated_at: string
@@ -31,10 +32,26 @@ export interface VideoPlan {
 export interface StoryboardShot {
   idx: number
   duration: number
-  visual: string
-  line: string
-  editing: string
-  ai_prompt: string
+  /**
+   * Single-field shot body (V2). Self-contained paragraph: 画面 → 台词 →
+   * 剪辑/运镜/字幕。Older plans may have empty `description` plus the legacy
+   * `visual` / `line` / `editing` / `ai_prompt` fields filled in — the editor
+   * stitches those together on load.
+   */
+  description?: string
+  visual?: string
+  line?: string
+  editing?: string
+  ai_prompt?: string
+}
+
+export interface PlanSection {
+  title?: string
+  name?: string
+  summary?: string
+  goal?: string
+  duration?: number | string
+  storyboard?: StoryboardShot[]
 }
 
 export interface SeriesPlan {
@@ -69,7 +86,23 @@ export interface EpisodeSummary {
   title: string
   status: VideoPlan['status']
   duration_seconds: number
+  episode_order: number
   updated_at: string
+}
+
+export interface AssetImage {
+  url: string
+  thumb_url: string
+  /** Canonical English key for routing (front/side/back/...). */
+  kind?: string
+  /** User-visible Chinese label (正面 / 侧面 / ...). Optional. */
+  label?: string
+  width?: number
+  height?: number
+  size?: number
+  uploaded_at?: string
+  /** Free-form note for power users. */
+  note?: string
 }
 
 export interface AssetBase {
@@ -78,11 +111,39 @@ export interface AssetBase {
   name: string
   payload: Record<string, unknown>
   fixed_traits: unknown[]
+  images: AssetImage[]
   created_at: string
   updated_at: string
 }
 
 export type AssetType = 'characters' | 'styles' | 'worldviews' | 'columns'
+
+export interface AssetSchemaField {
+  key: string
+  label: string
+  kind: 'text' | 'textarea' | 'lines'
+  placeholder?: string
+}
+
+export interface CustomAssetKind {
+  id: string
+  user: string
+  /** Slug-style key for URL paths, e.g. 'bgm'. */
+  name: string
+  /** Display name, e.g. 'BGM 音乐'. */
+  label: string
+  icon: string
+  description: string
+  schema: AssetSchemaField[]
+  image_labels: string[]
+  asset_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CustomAsset extends AssetBase {
+  kind: string
+}
 
 export interface Paginated<T> {
   count: number
@@ -118,3 +179,22 @@ export interface AITask {
 }
 
 export type TaskAware<T> = T & { task_id?: string }
+
+export interface AICritiqueAxis {
+  name: string
+  score: number
+  comment: string
+}
+
+export interface AICritiqueIssue {
+  severity: 'critical' | 'major' | 'minor' | string
+  field: string
+  comment: string
+}
+
+export interface AICritique {
+  score: number
+  axes: AICritiqueAxis[]
+  issues: AICritiqueIssue[]
+  summary: string
+}

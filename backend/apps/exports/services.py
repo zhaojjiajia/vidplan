@@ -92,7 +92,6 @@ def series_to_markdown(series: SeriesPlan) -> str:
     lines.append("")
     info = [
         ("方向", series.direction),
-        ("目标平台", series.target_platform or "—"),
         ("目标观众", series.target_audience or "—"),
         ("更新频率", series.update_frequency or "—"),
         ("单集时长 (秒)", series.episode_duration_seconds),
@@ -159,7 +158,7 @@ def _markdown_assets_section(series: SeriesPlan) -> list[str]:
 
 
 def _markdown_episodes_section(series: SeriesPlan) -> list[str]:
-    episodes = list(series.episodes.all())
+    episodes = list(series.episodes.order_by("episode_order", "created_at", "id"))
     if not episodes:
         return []
     out = ["## 单集清单", ""]
@@ -239,7 +238,6 @@ def plan_to_docx(plan: VideoPlan) -> bytes:
         ("方向", plan.direction),
         ("分类", plan.get_category_display()),
         ("AI 生成视频", "是" if plan.is_ai_generated_video else "否"),
-        ("目标平台", plan.target_platform or "-"),
         ("目标观众", plan.target_audience or "-"),
         ("时长 (秒)", plan.duration_seconds),
         ("风格", plan.style or "-"),
@@ -268,7 +266,6 @@ def series_to_docx(series: SeriesPlan) -> bytes:
         doc,
         [
             ("方向", series.direction),
-            ("目标平台", series.target_platform or "-"),
             ("目标观众", series.target_audience or "-"),
             ("更新频率", series.update_frequency or "-"),
             ("单集时长 (秒)", series.episode_duration_seconds),
@@ -308,6 +305,9 @@ def _add_mapping_section(doc: Document, title: str, data: dict[str, Any]) -> Non
         return
     doc.add_heading(title, level=1)
     for key, value in data.items():
+        # 跳过内部字段，例如旧版 `_ai_critique`，避免导出原始审稿 JSON。
+        if isinstance(key, str) and key.startswith("_"):
+            continue
         para = doc.add_paragraph()
         para.add_run(f"{key}: ").bold = True
         para.add_run(_stringify(value))
@@ -321,27 +321,40 @@ def _add_list_section(doc: Document, title: str, items: list[Any]) -> None:
         doc.add_paragraph(_stringify(item), style="List Number")
 
 
+def _shot_description_for_export(shot: dict[str, Any]) -> str:
+    """为 docx 导出生成单条镜头描述，逻辑与 markdown._shot_description 保持一致。"""
+    desc = str(shot.get("description") or "").strip()
+    if desc:
+        return desc
+    parts: list[str] = []
+    visual = str(shot.get("visual") or shot.get("scene") or "").strip()
+    if visual:
+        parts.append(f"画面:{visual}")
+    line = str(
+        shot.get("line") or shot.get("voiceover") or shot.get("dialogue") or shot.get("narration") or ""
+    ).strip()
+    if line:
+        parts.append(f"台词:\"{line}\"")
+    editing = str(shot.get("editing") or shot.get("camera") or shot.get("shot") or "").strip()
+    if editing:
+        parts.append(f"剪辑:{editing}")
+    return ";".join(parts)
+
+
 def _add_storyboard(doc: Document, shots: list[dict[str, Any]]) -> None:
     if not shots:
         return
     doc.add_heading("分镜脚本", level=1)
-    headers = ["#", "时长", "画面 / 场景", "台词 / 旁白", "剪辑", "AI Prompt"]
+    headers = ["#", "时长", "镜头描述"]
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     for index, title in enumerate(headers):
         table.rows[0].cells[index].text = title
     for i, shot in enumerate(shots, 1):
         cells = table.add_row().cells
-        values = [
-            i,
-            _first_value(shot, ("duration", "seconds")),
-            _first_value(shot, ("visual", "scene", "description")),
-            _first_value(shot, ("line", "voiceover", "dialogue", "narration")),
-            _first_value(shot, ("editing", "camera", "shot")),
-            _first_value(shot, ("ai_prompt", "prompt")),
-        ]
-        for index, value in enumerate(values):
-            cells[index].text = _stringify(value)
+        cells[0].text = str(i)
+        cells[1].text = _stringify(_first_value(shot, ("duration", "seconds")))
+        cells[2].text = _shot_description_for_export(shot)
 
 
 def _add_assets_sections(doc: Document, series: SeriesPlan) -> None:
@@ -370,7 +383,7 @@ def _add_assets_sections(doc: Document, series: SeriesPlan) -> None:
 
 
 def _add_episodes_section(doc: Document, series: SeriesPlan) -> None:
-    episodes = list(series.episodes.all())
+    episodes = list(series.episodes.order_by("episode_order", "created_at", "id"))
     if not episodes:
         return
     doc.add_heading("单集清单", level=1)

@@ -164,9 +164,9 @@ p  { margin: 0; }
   min-height: 32px;
   --el-button-bg-color: var(--vp-surface);
   --el-button-border-color: var(--vp-border);
-  --el-button-hover-bg-color: var(--vp-surface-alt);
+  --el-button-hover-bg-color: var(--vp-surface);
   --el-button-hover-border-color: var(--vp-border-strong);
-  --el-button-active-bg-color: var(--vp-surface-alt);
+  --el-button-active-bg-color: var(--vp-surface);
   --el-button-active-border-color: var(--vp-border-strong);
 }
 .el-button--primary {
@@ -188,10 +188,20 @@ p  { margin: 0; }
 }
 .el-button.is-text {
   --el-button-text-color: var(--vp-text-2);
+  --el-button-hover-bg-color: transparent;
+  --el-button-active-bg-color: transparent;
+  --el-button-hover-border-color: transparent;
+  --el-button-active-border-color: transparent;
   height: 28px;
   padding: 0 8px;
 }
-.el-button.is-text:hover { background: var(--vp-surface-alt); }
+.el-button.is-text:hover,
+.el-button.is-text:focus,
+.el-button.is-text:active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
 .el-button.is-text.el-button--primary { --el-button-text-color: var(--vp-primary); }
 .el-button.is-text.el-button--danger  { --el-button-text-color: var(--vp-danger);  }
 

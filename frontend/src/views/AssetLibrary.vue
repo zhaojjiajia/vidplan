@@ -23,7 +23,7 @@
     <EmptyState
       v-else-if="items.length === 0"
       :title="search ? '没有匹配的资产' : '还没有资产'"
-      :description="search ? '调整搜索词后再试。' : '把可复用的人设、风格、栏目沉淀下来,后续每条方案都能直接用。'"
+      :description="search ? '调整搜索词后再试。' : '把可复用的人物和环境沉淀下来,后续每条方案都能直接用。'"
     >
       <template v-if="!search" #action>
         <el-button type="primary" :icon="Plus" @click="openCreate">新建资产</el-button>
@@ -31,81 +31,94 @@
     </EmptyState>
 
     <div v-else class="asset-grid">
-      <article v-for="item in items" :key="item.id" class="asset-card">
-        <header class="asset-card-head">
-          <div>
-            <h3>{{ item.name }}</h3>
-            <p>{{ formatDate(item.updated_at) }}</p>
-          </div>
-          <span class="asset-badge">{{ schema.title }}</span>
-        </header>
-
-        <p class="asset-summary-text">{{ summarize(item) }}</p>
-
-        <div class="trait-list" v-if="item.fixed_traits?.length">
-          <el-tag v-for="trait in item.fixed_traits" :key="String(trait)" size="small" effect="plain" class="tag">
-            {{ trait }}
-          </el-tag>
+      <article
+        v-for="item in items"
+        :key="item.id"
+        class="asset-card"
+        role="button"
+        tabindex="0"
+        @click="openEdit(item)"
+        @keydown.enter.space.prevent="openEdit(item)"
+      >
+        <div v-if="coverOf(item)" class="asset-cover">
+          <img :src="coverOf(item)?.thumb_url || coverOf(item)?.url" :alt="item.name" />
+          <span v-if="(item.images?.length ?? 0) > 1" class="asset-cover-count">
+            {{ item.images!.length }} 张
+          </span>
         </div>
-        <p v-else class="muted">暂无固定特征</p>
+        <div v-else class="asset-cover asset-cover--empty">
+          <el-icon><Picture /></el-icon>
+        </div>
 
-        <footer class="asset-card-actions">
-          <el-button text type="primary" :icon="Edit" @click="openEdit(item)">编辑</el-button>
-          <el-button text type="danger" :icon="Delete" @click="remove(item)">删除</el-button>
-        </footer>
+        <div class="asset-body">
+          <header class="asset-card-head">
+            <h3 class="asset-name">{{ item.name }}</h3>
+            <span class="asset-badge">{{ schema.title }}</span>
+          </header>
+
+          <footer class="asset-card-actions" @click.stop>
+            <el-button text type="danger" :icon="Delete" size="small" @click="remove(item)">删除</el-button>
+          </footer>
+        </div>
       </article>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑资产' : '新建资产'" width="720px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑资产' : '新建资产'"
+      width="720px"
+      class="asset-edit-dialog"
+    >
       <el-form label-position="top">
-        <div class="dialog-import">
-          <el-upload
-            accept=".md,text/markdown,text/plain"
-            :auto-upload="false"
-            :show-file-list="false"
-            :on-change="onAssetMarkdownChange"
-          >
-            <el-button :icon="Upload" :loading="importingMarkdown">导入 Markdown</el-button>
-          </el-upload>
-          <span>AI 分析并解析为{{ schema.title }}</span>
-        </div>
-
-        <el-form-item label="名称">
-          <el-input v-model="form.name" placeholder="例如: 女主小满 / 治愈写实风格" />
-        </el-form-item>
-
-        <el-form-item v-for="field in schema.fields" :key="field.key" :label="field.label">
-          <el-input
-            v-if="field.kind === 'text'"
-            v-model="textValues[field.key]"
-            :placeholder="field.placeholder"
-          />
-          <el-input
-            v-else
-            v-model="textValues[field.key]"
-            type="textarea"
-            :rows="field.kind === 'lines' ? 5 : 3"
-            :placeholder="field.placeholder"
+        <!-- 参考图 first, no label — gallery is its own visual block. -->
+        <el-form-item class="aed-gallery-item">
+          <AssetImageGallery
+            v-model="images"
+            :labels="schema.imageLabels"
+            :ai-prompt-provider="buildAssetPrompt"
           />
         </el-form-item>
 
-        <el-form-item label="固定特征 (每行一条)">
-          <el-input
-            v-model="fixedTraitsText"
-            type="textarea"
-            :rows="3"
-            placeholder="发色&#10;性格&#10;口头禅"
-          />
-        </el-form-item>
-
-        <el-collapse>
-          <el-collapse-item title="高级:原始 JSON" name="advanced">
-            <el-form-item label="详细配置 JSON">
-              <el-input v-model="rawJson" type="textarea" :rows="8" />
-              <div class="hint muted">编辑此处会覆盖上面字段;留空或保持自动同步即可。</div>
-            </el-form-item>
-          </el-collapse-item>
-        </el-collapse>
+        <!-- Field table: each row is "字段名 | 值",一律左右两列对齐显示。
+             比纵向 form 列表更紧凑,信息密度高,跟资料卡的"档案"感一致。 -->
+        <table class="aed-table">
+          <tbody>
+            <tr>
+              <th>名称</th>
+              <td>
+                <el-input v-model="form.name" placeholder="例如: 女主小满 / 狗熊岭森林" />
+              </td>
+            </tr>
+            <tr v-for="field in schema.fields" :key="field.key">
+              <th>{{ field.label }}</th>
+              <td>
+                <el-input
+                  v-if="field.kind === 'text'"
+                  v-model="textValues[field.key]"
+                  :placeholder="field.placeholder"
+                />
+                <el-input
+                  v-else
+                  v-model="textValues[field.key]"
+                  type="textarea"
+                  :autosize="{ minRows: 1 }"
+                  :placeholder="field.placeholder"
+                />
+              </td>
+            </tr>
+            <tr>
+              <th>固定特征</th>
+              <td>
+                <el-input
+                  v-model="fixedTraitsText"
+                  type="textarea"
+                  :autosize="{ minRows: 1 }"
+                  placeholder="每行一条:发色 / 性格 / 口头禅"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -118,22 +131,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Delete, Edit, Plus, Search, Upload } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
+import { Delete, Picture, Plus, Search } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assetsApi } from '@/api/assets'
-import { markdownImportApi, type AssetMarkdownImportData } from '@/api/markdownImport'
+import AssetImageGallery from '@/components/AssetImageGallery.vue'
 import CardSkeleton from '@/components/CardSkeleton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { ASSET_SCHEMAS, type AssetField } from '@/data/assetSchemas'
-import type { AssetBase, AssetType } from '@/types/api'
-import {
-  cleanFieldLabel,
-  extractMarkdownLines,
-  extractMarkdownValue,
-  firstMarkdownHeading,
-  markdownToPlain,
-} from '@/utils/markdownImport'
+import type { AssetBase, AssetImage, AssetType } from '@/types/api'
 
 const route = useRoute()
 const assetType = computed(() => route.meta.assetType as AssetType)
@@ -141,7 +147,6 @@ const schema = computed(() => ASSET_SCHEMAS[assetType.value])
 
 const loading = ref(false)
 const saving = ref(false)
-const importingMarkdown = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const items = ref<AssetBase[]>([])
@@ -152,7 +157,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 const form = reactive({ name: '' })
 const textValues = reactive<Record<string, string>>({})
 const fixedTraitsList = ref<string[]>([])
-const rawJson = ref('{}')
+const images = ref<AssetImage[]>([])
 
 const fixedTraitsText = computed({
   get: () => fixedTraitsList.value.join('\n'),
@@ -160,31 +165,6 @@ const fixedTraitsText = computed({
     fixedTraitsList.value = v.split('\n').map((s) => s.trim()).filter(Boolean)
   },
 })
-
-const ASSET_FIELD_ALIASES: Partial<Record<AssetType, Record<string, string[]>>> = {
-  characters: {
-    role: ['身份', '定位', '角色', '人设'],
-    appearance: ['外形', '外貌', '服装', '形象'],
-    personality: ['性格', '人格', '人物性格'],
-    voice: ['声音', '语气', '口吻', '口头禅'],
-  },
-  styles: {
-    visual: ['画面', '视觉', '画面风格'],
-    editing: ['剪辑', '转场', '节奏'],
-    music: ['音乐', '配乐', '音效'],
-    color: ['色彩', '调色', '色调'],
-  },
-  worldviews: {
-    background: ['背景', '故事背景', '世界设定'],
-    rules: ['规则', '世界规则', '设定规则'],
-    locations: ['地点', '关键地点', '场景'],
-  },
-  columns: {
-    structure: ['结构', '固定结构', '栏目结构', '固定环节'],
-    title_formula: ['标题', '标题套路', '标题公式'],
-    cadence: ['节奏', '发布节奏', '更新频率'],
-  },
-}
 
 onMounted(load)
 watch(assetType, () => {
@@ -247,7 +227,7 @@ function openCreate() {
   form.name = ''
   resetTextValues()
   fixedTraitsList.value = []
-  rawJson.value = JSON.stringify(buildPayloadFromFields(), null, 2)
+  images.value = []
   dialogVisible.value = true
 }
 
@@ -258,152 +238,28 @@ function openEdit(item: AssetBase) {
   fixedTraitsList.value = Array.isArray(item.fixed_traits)
     ? item.fixed_traits.map((x) => String(x))
     : []
-  rawJson.value = JSON.stringify(item.payload || {}, null, 2)
+  images.value = Array.isArray(item.images) ? [...item.images] : []
   dialogVisible.value = true
 }
 
-async function onAssetMarkdownChange(file: UploadFile) {
-  const text = await readUploadText(file)
-  if (!text) {
-    ElMessage.warning('未读取到 Markdown 内容')
-    return
-  }
-
-  await importAssetMarkdown(text)
-}
-
-async function importAssetMarkdown(text: string) {
-  importingMarkdown.value = true
-  try {
-    const local = parseAssetMarkdownLocally(text)
-    const analyzed = await markdownImportApi.analyzeAsset(text, assetType.value, schema.value)
-    if (analyzed.ok) {
-      applyAssetImportResult(mergeAssetImport(local, analyzed.data))
-      ElMessage.success(`AI 已分析并导入${schema.value.title}`)
-      return
-    }
-
-    applyAssetImportResult(local)
-    ElMessage.warning('AI 分析不可用,已使用本地解析')
-  } catch {
-    applyAssetImportResult(parseAssetMarkdownLocally(text))
-    ElMessage.success(`已解析为${schema.value.title}`)
-  } finally {
-    importingMarkdown.value = false
-  }
-}
-
-function parseAssetMarkdownLocally(text: string): AssetMarkdownImportData {
-  const title = extractMarkdownValue(text, ['名称', '标题', '资产名称']) || firstMarkdownHeading(text)
-  const payload: Record<string, unknown> = {}
-
-  let filled = false
+/**
+ * Synthesise a Chinese prompt for AI image generation from the current form
+ * state. Used by AssetImageGallery's `aiPromptProvider` so users don't have
+ * to type a description themselves.
+ */
+function buildAssetPrompt(): string {
+  const lines: string[] = []
+  if (form.name.trim()) lines.push(`资产名称:${form.name.trim()}`)
+  lines.push(`资产类型:${schema.value.title}`)
   for (const field of schema.value.fields) {
-    const labels = getFieldLabels(field)
-    if (field.kind === 'lines') {
-      const lines = extractMarkdownLines(text, labels)
-      if (lines.length) {
-        payload[field.key] = lines
-        filled = true
-      }
-      continue
-    }
-
-    const value = extractMarkdownValue(text, labels)
-    if (value) {
-      payload[field.key] = value
-      filled = true
-    }
+    const raw = (textValues[field.key] || '').trim()
+    if (raw) lines.push(`${field.label}:${raw}`)
   }
-
-  const fixedTraits = extractMarkdownLines(text, ['固定特征', '固定特点', '不可变特征', '禁改特征'])
-
-  if (!filled) {
-    const fallbackField = schema.value.fields.find((field) => field.kind !== 'lines') || schema.value.fields[0]
-    if (fallbackField) payload[fallbackField.key] = markdownToPlain(text)
+  if (fixedTraitsList.value.length) {
+    lines.push(`固定特征:${fixedTraitsList.value.join(' / ')}`)
   }
-
-  return {
-    name: title ? truncate(title.replace(/\n/g, ' '), 80) : '',
-    payload,
-    fixed_traits: fixedTraits,
-  }
-}
-
-function mergeAssetImport(local: AssetMarkdownImportData, ai: AssetMarkdownImportData): AssetMarkdownImportData {
-  const localPayload = filterAssetPayload(local.payload || {})
-  const aiPayload = removeEmptyPayloadValues(filterAssetPayload(ai.payload || {}))
-  const aiTraits = normalizeStringList(ai.fixed_traits)
-
-  return {
-    name: cleanImportString(ai.name) || local.name || '',
-    payload: { ...localPayload, ...aiPayload },
-    fixed_traits: aiTraits.length ? aiTraits : normalizeStringList(local.fixed_traits),
-  }
-}
-
-function applyAssetImportResult(result: AssetMarkdownImportData) {
-  const name = cleanImportString(result.name)
-  if (name) form.name = truncate(name.replace(/\n/g, ' '), 80)
-
-  const payload = filterAssetPayload(result.payload || {})
-  for (const field of schema.value.fields) {
-    if (Object.prototype.hasOwnProperty.call(payload, field.key)) {
-      textValues[field.key] = fieldFromPayload(field, payload[field.key])
-    }
-  }
-
-  const fixedTraits = normalizeStringList(result.fixed_traits)
-  if (fixedTraits.length) fixedTraitsList.value = fixedTraits
-
-  rawJson.value = JSON.stringify(buildPayloadFromFields(), null, 2)
-}
-
-async function readUploadText(file: UploadFile) {
-  const raw = file.raw
-  if (!raw) return ''
-  return raw.text()
-}
-
-function getFieldLabels(field: AssetField) {
-  const cleaned = cleanFieldLabel(field.label)
-  const aliases = ASSET_FIELD_ALIASES[assetType.value]?.[field.key] || []
-  return [...new Set([
-    cleaned,
-    ...cleaned.split(/\s+/),
-    field.key,
-    ...aliases,
-  ].filter(Boolean))]
-}
-
-function filterAssetPayload(payload: Record<string, unknown>) {
-  const allowed = new Set(schema.value.fields.map((field) => field.key))
-  return Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.has(key)))
-}
-
-function removeEmptyPayloadValues(payload: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => {
-      if (Array.isArray(value)) return value.some((item) => cleanImportString(item))
-      if (typeof value === 'string') return value.trim().length > 0
-      if (value && typeof value === 'object') return Object.keys(value).length > 0
-      return value != null
-    })
-  )
-}
-
-function normalizeStringList(value: unknown) {
-  if (Array.isArray(value)) return value.map((item) => cleanImportString(item)).filter(Boolean)
-  if (typeof value === 'string') {
-    return value.split(/\n|[;；]/).map((item) => item.trim()).filter(Boolean)
-  }
-  return []
-}
-
-function cleanImportString(value: unknown) {
-  if (typeof value === 'string') return value.trim()
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  return ''
+  lines.push('请基于以上设定生成一张高质量参考图,写实风格,主体清晰,白色或浅色背景,工作室柔光。')
+  return lines.join('\n')
 }
 
 async function save() {
@@ -411,25 +267,16 @@ async function save() {
     ElMessage.warning('请填写名称')
     return
   }
-  let payload = buildPayloadFromFields()
-  if (rawJson.value && rawJson.value.trim() !== JSON.stringify(payload, null, 2).trim()) {
-    try {
-      const advanced = JSON.parse(rawJson.value)
-      if (advanced && typeof advanced === 'object' && !Array.isArray(advanced)) {
-        payload = { ...payload, ...advanced }
-      } else {
-        ElMessage.error('原始 JSON 必须是对象')
-        return
-      }
-    } catch {
-      ElMessage.error('原始 JSON 解析失败')
-      return
-    }
-  }
+  const payload = buildPayloadFromFields()
 
   saving.value = true
   try {
-    const body = { name: form.name.trim(), payload, fixed_traits: [...fixedTraitsList.value] }
+    const body = {
+      name: form.name.trim(),
+      payload,
+      fixed_traits: [...fixedTraitsList.value],
+      images: [...images.value],
+    }
     if (editingId.value) {
       await assetsApi.patch(assetType.value, editingId.value, body)
       ElMessage.success('已更新资产')
@@ -442,6 +289,10 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function coverOf(item: AssetBase): AssetImage | undefined {
+  return Array.isArray(item.images) && item.images.length ? item.images[0] : undefined
 }
 
 async function remove(item: AssetBase) {
@@ -477,56 +328,98 @@ function formatDate(iso: string) {
 .muted { color: var(--vp-text-3); font-size: 13px; }
 .tag { margin-right: 6px; margin-bottom: 4px; }
 .hint { margin-top: 4px; }
-.dialog-import {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-  color: var(--vp-text-3);
-  font-size: 16px;
-}
 .asset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(292px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
 }
 .asset-card {
-  min-height: 220px;
+  min-height: 176px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
   border: 1px solid var(--vp-border);
   border-radius: var(--vp-r-lg);
   background: var(--vp-surface);
   box-shadow: var(--vp-shadow-xs);
   transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  overflow: hidden;
+  cursor: pointer;
 }
 .asset-card:hover {
   border-color: var(--vp-border-strong);
   box-shadow: var(--vp-shadow-md);
   transform: translateY(-2px);
 }
+.asset-card:focus-visible {
+  outline: 2px solid var(--vp-primary);
+  outline-offset: 2px;
+}
+
+.asset-cover {
+  position: relative;
+  width: 100%;
+  /* Taller cover so portrait images (人物全身像) display larger. */
+  height: 148px;
+  background: var(--vp-surface-alt, #f3f4f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.asset-cover img {
+  max-width: 100%;
+  max-height: 100%;
+  /* Contain (not cover) so a tall portrait — like a full-body 熊大 — shows
+     the entire figure with letterboxing on the sides instead of getting
+     sliced through the middle. The cover background fills the empty area. */
+  object-fit: contain;
+  display: block;
+}
+.asset-cover--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vp-text-4, #d1d5db);
+  font-size: 30px;
+}
+.asset-cover-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.asset-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 9px;
+  flex: 1;
+}
 .asset-card-head {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
 }
-.asset-card-head h3 {
+.asset-name {
   margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
   color: var(--vp-text-1);
-  font-size: 18px;
-  line-height: 1.35;
+  line-height: 1.3;
+  overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.asset-card-head p {
-  margin-top: 4px;
-  color: var(--vp-text-4);
-  font-size: 12.5px;
+  flex: 1;
+  min-width: 0;
 }
 .asset-badge {
   flex-shrink: 0;
@@ -534,29 +427,16 @@ function formatDate(iso: string) {
   border-radius: var(--vp-r-pill);
   background: var(--vp-primary-soft);
   color: var(--vp-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-}
-.asset-summary-text {
-  color: var(--vp-text-2);
-  font-size: 14px;
-  line-height: 1.65;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.trait-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: auto;
+  white-space: nowrap;
 }
 .asset-card-actions {
+  margin-top: auto;
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid var(--vp-divider);
 }
 
@@ -569,3 +449,5 @@ function formatDate(iso: string) {
   .asset-grid { grid-template-columns: 1fr; }
 }
 </style>
+
+<!-- Dialog inputs are styled globally in styles/asset-edit-dialog.css -->

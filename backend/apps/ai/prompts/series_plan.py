@@ -13,14 +13,21 @@ USER_TEMPLATE = """请生成一个系列方案。
 【风格】{style}
 【系列想法】{idea}
 
+如果【方向】为空,请根据【系列想法】自行从这些枚举中选择最贴近的 direction:
+vlog | tutorial | spoken | knowledge | store_visit | review | sales | daily |
+ai_beauty | ai_drama | ai_animation | ai_short_drama | ai_kichiku |
+text_to_video | image_to_video | virtual_ip
+如果都不贴近,输出空字符串。
+
 请输出严格 JSON,字段如下:
 {{
   "title": "系列标题",
   "summary": "系列一句话简介",
+  "direction": "从枚举里推断最贴近的方向 key,如果无法判断则空字符串",
+  "direction_label": "更具体的中文方向名,4-12 字",
   "positioning": {{
     "core_concept": "系列核心概念",
     "target_user": "目标用户画像",
-    "differentiation": "差异化",
     "promise": "对观众的承诺"
   }},
   "episode_template": {{
@@ -34,6 +41,9 @@ USER_TEMPLATE = """请生成一个系列方案。
   "visual_style": {{"tone":"","color":"","lighting":"","camera":""}},
   "title_style": {{"pattern":"","examples":["示例标题 1","示例标题 2"],"length":"建议字数"}},
   "initial_topics": ["选题 1","选题 2","选题 3","选题 4","选题 5"],
+  "relationships": [
+    {{"from":"人物 A","to":"人物 B","label":"关系,如朋友/敌人/师徒/家人","description":"可选补充"}}
+  ],
   "assets": {{
     "characters": [
       {{"name":"主要人物","payload":{{"role":"","appearance":"","personality":"","voice":""}},"fixed_traits":["发色","性格"]}}
@@ -49,4 +59,7 @@ USER_TEMPLATE = """请生成一个系列方案。
     ]
   }}
 }}
+
+人物关系只在明确存在多个人物或角色关系时输出;日常 vlog、教程、游戏流程、知识栏目等没有人物关系时输出空数组 []。
+资产建议也只输出对系列复用有帮助的内容,不要为了填满字段编造角色关系。
 """

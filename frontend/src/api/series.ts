@@ -12,7 +12,7 @@ export type SeriesPayload = Omit<
 >
 
 export interface SeriesGenerateInput {
-  direction: string
+  direction?: string
   idea: string
   target_platform?: string
   target_audience?: string

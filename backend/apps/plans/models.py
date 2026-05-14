@@ -70,6 +70,7 @@ class VideoPlan(UUIDModel, TimestampedModel):
     storyboard = models.JSONField(default=list, blank=True)
     editing_advice = models.JSONField(default=dict, blank=True)
     ai_prompts = models.JSONField(default=dict, blank=True)
+    episode_order = models.PositiveIntegerField(default=0)
 
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
 

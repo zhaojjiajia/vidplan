@@ -24,6 +24,13 @@ export default defineConfig({
         timeout: 240_000,
         proxyTimeout: 240_000,
       },
+      // Asset images live under MEDIA_URL (`/media/*`) on the backend in
+      // dev. Without proxying the browser would resolve them against
+      // localhost:5173 and 404. In prod nginx covers this directly.
+      '/media': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

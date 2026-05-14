@@ -18,6 +18,9 @@ def _kv_section(title: str, data: dict | None) -> list[str]:
         return []
     out = [f"## {title}", ""]
     for k, v in data.items():
+        # 跳过内部字段，例如旧版 `_ai_critique`，避免导出给用户看。
+        if isinstance(k, str) and k.startswith("_"):
+            continue
         if isinstance(v, list):
             out.append(f"- **{k}**:")
             for item in v:
@@ -25,6 +28,8 @@ def _kv_section(title: str, data: dict | None) -> list[str]:
         elif isinstance(v, dict):
             out.append(f"- **{k}**:")
             for kk, vv in v.items():
+                if isinstance(kk, str) and kk.startswith("_"):
+                    continue
                 out.append(f"  - {kk}: {vv}")
         else:
             out.append(f"- **{k}**: {v}")
@@ -32,21 +37,36 @@ def _kv_section(title: str, data: dict | None) -> list[str]:
     return out
 
 
+def _shot_description(shot: dict) -> str:
+    """选出最适合导出的单条镜头描述。新版优先用 description，旧版则拼接 visual / line / editing。"""
+    desc = (shot.get("description") or "").strip()
+    if desc:
+        return desc
+    parts: list[str] = []
+    visual = (shot.get("visual") or shot.get("scene") or "").strip()
+    if visual:
+        parts.append(f"画面:{visual}")
+    line = (shot.get("line") or shot.get("voiceover") or shot.get("dialogue") or shot.get("narration") or "").strip()
+    if line:
+        parts.append(f"台词:\"{line}\"")
+    editing = (shot.get("editing") or shot.get("camera") or shot.get("shot") or "").strip()
+    if editing:
+        parts.append(f"剪辑:{editing}")
+    return ";".join(parts)
+
+
 def _storyboard_section(shots: list[dict]) -> list[str]:
     if not shots:
         return []
     out = ["## 分镜脚本", ""]
-    headers = ["#", "时长", "画面 / 场景", "台词 / 旁白", "运镜", "AI Prompt"]
+    headers = ["#", "时长", "镜头描述"]
     out.append("| " + " | ".join(headers) + " |")
-    out.append("|" + "|".join(["---"] * len(headers)) + "|")
+    out.append("|" + "|".join(["---", "---", "---"]) + "|")
     for i, s in enumerate(shots, 1):
         row = [
             str(i),
             _md_cell(_first_value(s, ("duration", "seconds"))),
-            _md_cell(_first_value(s, ("visual", "scene", "description"))),
-            _md_cell(_first_value(s, ("line", "voiceover", "dialogue", "narration"))),
-            _md_cell(_first_value(s, ("editing", "camera", "shot"))),
-            _md_cell(_first_value(s, ("ai_prompt", "prompt"))),
+            _md_cell(_shot_description(s)),
         ]
         out.append("| " + " | ".join(row) + " |")
     out.append("")
@@ -71,7 +91,6 @@ def plan_to_markdown(plan: VideoPlan) -> str:
         ("方向", plan.direction),
         ("分类", plan.get_category_display()),
         ("AI 生成视频", "是" if plan.is_ai_generated_video else "否"),
-        ("目标平台", plan.target_platform or "—"),
         ("目标观众", plan.target_audience or "—"),
         ("时长 (秒)", plan.duration_seconds),
         ("风格", plan.style or "—"),

@@ -41,3 +41,18 @@ export function findDirectionLabel(direction: string): string {
   }
   return direction
 }
+
+/**
+ * Display name for a plan's direction:
+ *   1) Prefer the AI-suggested `content.direction_label` (more specific
+ *      Chinese, e.g. "AI 校园悬疑短剧" instead of just "AI 短剧").
+ *   2) Fall back to the canonical 16-key label.
+ *   3) Final fallback: the raw direction string.
+ */
+export function resolveDirectionDisplay(
+  plan: { direction?: string; content?: Record<string, unknown> | null },
+): string {
+  const label = (plan.content as { direction_label?: unknown } | null | undefined)?.direction_label
+  if (typeof label === 'string' && label.trim()) return label.trim()
+  return findDirectionLabel(plan.direction || '')
+}

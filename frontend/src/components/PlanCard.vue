@@ -15,8 +15,7 @@
     </header>
 
     <div class="meta">
-      <span class="meta-pill">{{ findDirectionLabel(plan.direction) }}</span>
-      <span class="meta-pill subtle">{{ plan.target_platform || '未设平台' }}</span>
+      <span v-if="directionDisplay" class="meta-pill">{{ directionDisplay }}</span>
       <span class="meta-pill subtle">{{ plan.duration_seconds }}s</span>
     </div>
 
@@ -25,11 +24,11 @@
     <footer class="foot" @click.stop>
       <span class="time">{{ formatDate(plan.updated_at) }}</span>
       <div class="actions">
-        <el-button text type="primary" size="small" :icon="Edit" @click="$emit('open', plan)">编辑</el-button>
+        <!-- 点击整张卡片已进入编辑，无需单独保留编辑按钮。 -->
         <el-dropdown trigger="click" @command="onCommand">
-          <el-button text size="small">
-            更多<el-icon class="el-icon--right"><MoreFilled /></el-icon>
-          </el-button>
+          <button type="button" class="more-trigger">
+            更多...
+          </button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="export">导出</el-dropdown-item>
@@ -47,12 +46,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Edit, MoreFilled } from '@element-plus/icons-vue'
 
-import { findDirectionLabel } from '@/data/directions'
+import { resolveDirectionDisplay } from '@/data/directions'
 import type { VideoPlan } from '@/types/api'
 
 const props = defineProps<{ plan: VideoPlan }>()
+
+const directionDisplay = computed(() => resolveDirectionDisplay(props.plan))
 const emit = defineEmits<{
   (e: 'open' | 'duplicate' | 'remove' | 'export', plan: VideoPlan): void
 }>()
@@ -94,8 +94,8 @@ function formatDate(iso: string) {
 
 <style scoped>
 .plan-card {
-  background: var(--vp-surface);
-  border: 1px solid var(--vp-border);
+  background: rgba(255, 255, 255, .48);
+  border: 1px solid rgba(94, 78, 70, .11);
   border-radius: var(--vp-r-lg);
   padding: 16px 16px 12px;
   display: flex; flex-direction: column;
@@ -105,6 +105,7 @@ function formatDate(iso: string) {
   min-height: 190px;
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(18px) saturate(138%);
   animation: vp-fade-up .35s ease both;
 }
 .plan-card::before {
@@ -130,8 +131,8 @@ function formatDate(iso: string) {
 }
 .plan-card:hover::before { opacity: 1; }
 .plan-card:hover {
-  border-color: var(--vp-border-strong);
-  box-shadow: var(--vp-shadow-md);
+  border-color: color-mix(in srgb, var(--vp-primary) 32%, rgba(94, 78, 70, .11));
+  box-shadow: 0 18px 42px rgba(84, 40, 36, .10);
   transform: translateY(-2px);
 }
 .plan-card:active { transform: translateY(-1px); }
@@ -181,6 +182,27 @@ function formatDate(iso: string) {
 }
 .time { font-size: 12px; color: var(--vp-text-3); }
 .actions { display: flex; gap: 2px; align-items: center; }
+.more-trigger {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  color: var(--vp-text-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.more-trigger:hover,
+.more-trigger:active {
+  background: transparent;
+  color: var(--vp-text-3);
+  box-shadow: none;
+}
+.more-trigger:focus-visible {
+  outline: 2px solid var(--vp-primary);
+  outline-offset: 4px;
+}
 .danger { color: var(--vp-danger); }
 
 @media (max-width: 560px) {

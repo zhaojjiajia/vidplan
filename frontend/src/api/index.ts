@@ -8,6 +8,8 @@ export const http = axios.create({
   timeout: 240_000,
 })
 
+let refreshPromise: Promise<string> | null = null
+
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const auth = useAuthStore()
   if (auth.accessToken) {
@@ -21,6 +23,21 @@ http.interceptors.response.use(
   async (error: AxiosError<{ detail?: string } | Blob>) => {
     if (error.response?.status === 401) {
       const auth = useAuthStore()
+      const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+      if (auth.refreshToken && original && !original._retry && !isRefreshRequest(original.url)) {
+        original._retry = true
+        try {
+          refreshPromise ||= auth.refreshAccessToken().finally(() => {
+            refreshPromise = null
+          })
+          const access = await refreshPromise
+          original.headers.Authorization = `Bearer ${access}`
+          return http(original)
+        } catch {
+          auth.logout()
+          window.location.href = '/login'
+        }
+      }
       auth.logout()
       window.location.href = '/login'
     } else {
@@ -30,6 +47,10 @@ http.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+function isRefreshRequest(url?: string) {
+  return Boolean(url?.includes('/auth/refresh/'))
+}
 
 async function getErrorMessage(error: AxiosError<{ detail?: string } | Blob>): Promise<string> {
   const data = error.response?.data

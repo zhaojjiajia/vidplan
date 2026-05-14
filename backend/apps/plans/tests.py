@@ -8,6 +8,7 @@ from apps.ai.models import AITask
 from apps.ai.services import AIPayloadError
 from apps.assets.models import CharacterAsset
 
+from .ai_workflows import apply_ai_payload
 from .models import SeriesPlan, VideoPlan
 
 
@@ -147,7 +148,140 @@ class PlansAndAssetsAPITests(APITestCase):
         self.assertEqual(task.status, AITask.Status.SUCCEEDED)
         self.assertEqual(task.result_payload["plan_id"], str(plan.id))
         self.assertEqual(task.input_payload["idea"], "做一条咖啡店探访")
+        self.assertEqual(plan.storyboard, [])
+        self.assertEqual(plan.content["sections"][0]["storyboard"], [])
         mock_generate_single_plan.assert_called_once()
+
+    def test_apply_ai_payload_keeps_section_storyboard_authoritative(self):
+        plan = self.create_plan()
+        plan.content = {
+            "sections": [
+                {"title": "章节 1", "summary": "铺垫", "storyboard": []},
+                {"title": "章节 2", "summary": "推进", "storyboard": []},
+            ]
+        }
+        plan.storyboard = []
+
+        apply_ai_payload(plan, {
+            "content": {
+                "sections": [
+                    {"title": "章节 1", "summary": "铺垫", "storyboard": []},
+                    {
+                        "title": "章节 2",
+                        "summary": "推进",
+                        "storyboard": [{"idx": 9, "duration": 30, "description": "第二章分镜"}],
+                    },
+                ]
+            },
+            "storyboard": [{"idx": 9, "duration": 30, "description": "第二章分镜"}],
+        })
+
+        self.assertEqual(plan.content["sections"][0]["storyboard"], [])
+        self.assertEqual(plan.content["sections"][1]["storyboard"][0]["idx"], 1)
+        self.assertEqual(plan.storyboard, [{"idx": 1, "duration": 30, "description": "第二章分镜"}])
+
+    @patch("apps.plans.views.build_creation_outline")
+    def test_outline_returns_simple_payload_without_creating_plan(self, mock_build_creation_outline):
+        mock_build_creation_outline.return_value = {
+            "title": "咖啡探店大纲",
+            "summary": "围绕一家咖啡店做探访视频",
+            "plan_type": "single",
+            "direction": "store_visit",
+            "direction_label": "咖啡探店",
+            "audience": "城市白领",
+            "platform": "抖音",
+            "style": "轻松",
+            "duration_hint": "30 秒",
+            "outline": [{"title": "开场", "note": "交代店铺反差"}],
+            "key_points": ["店铺特色", "结尾反转"],
+        }
+
+        self.authenticate()
+        resp = self.client.post(
+            "/api/v1/plans/outline/",
+            {
+                "plan_type": "single",
+                "idea": "做一条咖啡店探访",
+                "target_platform": "抖音",
+                "target_audience": "城市白领",
+                "duration_seconds": 30,
+                "style": "轻松",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["title"], "咖啡探店大纲")
+        self.assertEqual(VideoPlan.objects.count(), 0)
+        mock_build_creation_outline.assert_called_once()
+
+    @patch("apps.plans.ai_workflows.generate_single_plan")
+    def test_generate_plan_no_inline_critique(self, mock_generate_single_plan):
+        """V2 review flow: critique is no longer attached during generation —
+        it only runs via the explicit POST /plans/{id}/review/ endpoint. This
+        test guards the contract that even if services accidentally returns
+        an `_ai_critique` field again, ai_workflows would not persist it
+        because the helper now extracts only `content`."""
+        mock_generate_single_plan.return_value = {
+            "title": "无审稿方案",
+            "summary": "",
+            "content": {"positioning": "通用"},
+            "storyboard": [{"idx": 1, "duration": 3, "description": "完整描述"}],
+            "editing_advice": {},
+            "ai_prompts": {},
+        }
+
+        self.authenticate()
+        resp = self.client.post(
+            "/api/v1/plans/generate/",
+            {
+                "direction": "ai_short_drama",
+                "category": VideoPlan.Category.AI_GENERATED,
+                "is_ai_generated_video": True,
+                "idea": "校园悬疑",
+                "duration_seconds": 45,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        plan = VideoPlan.objects.get(pk=resp.data["id"])
+        self.assertEqual(plan.content["positioning"], "通用")
+        self.assertNotIn("_ai_critique", plan.content)
+        # 初始创建只保留章节规划,即使模型误返分镜也不直接入库。
+        self.assertEqual(plan.storyboard, [])
+        self.assertEqual(plan.content["sections"][0]["storyboard"], [])
+
+    @patch("apps.plans.ai_workflows.generate_single_plan")
+    def test_generate_plan_without_critique_stores_clean_content(self, mock_generate_single_plan):
+        """When critique is disabled or missing, content must NOT contain a
+        stale _ai_critique key — otherwise the editor would render a phantom
+        panel from a previous generation."""
+        mock_generate_single_plan.return_value = {
+            "title": "无审稿方案",
+            "summary": "",
+            "content": {"positioning": "通用"},
+            "storyboard": [],
+            "editing_advice": {},
+            "ai_prompts": {},
+        }
+
+        self.authenticate()
+        resp = self.client.post(
+            "/api/v1/plans/generate/",
+            {
+                "direction": "vlog",
+                "category": VideoPlan.Category.REAL,
+                "is_ai_generated_video": False,
+                "idea": "城市漫步",
+                "duration_seconds": 30,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        plan = VideoPlan.objects.get(pk=resp.data["id"])
+        self.assertNotIn("_ai_critique", plan.content)
 
     @patch("apps.plans.ai_workflows.generate_single_plan")
     def test_generate_plan_records_failed_task_on_ai_payload_error(self, mock_generate_single_plan):
@@ -584,4 +718,143 @@ class PlansAndAssetsAPITests(APITestCase):
         resp = self.client.get(f"/api/v1/series/{series.id}/export/?format=pdf")
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("暂不支持", resp.data["detail"])
+
+    @patch("apps.plans.views.review_plan")
+    def test_review_endpoint_returns_critique(self, mock_review_plan):
+        mock_review_plan.return_value = {
+            "score": 82,
+            "axes": [{"name": "钩子强度", "score": 85, "comment": "强反差,可保留"}],
+            "issues": [{"severity": "minor", "field": "storyboard[0].description", "comment": "可再细化光线"}],
+            "summary": "整体可用",
+        }
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(f"/api/v1/plans/{plan.id}/review/", {}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["score"], 82)
+        self.assertEqual(resp.data["issues"][0]["severity"], "minor")
+        kwargs = mock_review_plan.call_args.kwargs
+        self.assertEqual(kwargs["plan_dict"]["direction"], "vlog")
+
+    def test_review_endpoint_is_user_scoped(self):
+        other_plan = self.create_plan(user=self.other_user)
+        self.authenticate()
+
+        resp = self.client.post(f"/api/v1/plans/{other_plan.id}/review/", {}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch("apps.plans.views.review_plan")
+    def test_review_endpoint_swallows_critic_errors(self, mock_review_plan):
+        """If the upstream provider explodes, /review/ must still return 200
+        with a 0-score sentinel so the editor's modal can show 'audit failed,
+        confirm anyway?' instead of a stack trace."""
+        mock_review_plan.side_effect = RuntimeError("provider blew up")
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(f"/api/v1/plans/{plan.id}/review/", {}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["score"], 0)
+        self.assertIn("审稿失败", resp.data["summary"])
+
+    @patch("apps.plans.views.rewrite_field")
+    def test_rewrite_returns_candidates_for_allowed_path(self, mock_rewrite_field):
+        mock_rewrite_field.return_value = {
+            "candidates": [
+                {"value": "更猛的钩子 A", "reason": "强冲突"},
+                {"value": "更猛的钩子 B", "reason": "悬念"},
+            ],
+        }
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{plan.id}/rewrite/",
+            {"path": "title", "hint": "更冲突", "count": 2},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp.data["candidates"]), 2)
+        self.assertEqual(resp.data["candidates"][0]["value"], "更猛的钩子 A")
+        # Ensure direction context + current value get propagated to the service.
+        kwargs = mock_rewrite_field.call_args.kwargs
+        self.assertEqual(kwargs["path"], "title")
+        self.assertEqual(kwargs["hint"], "更冲突")
+        self.assertEqual(kwargs["current_value"], "测试方案")
+        self.assertEqual(kwargs["plan_dict"]["direction"], "vlog")
+
+    def test_rewrite_rejects_disallowed_path(self):
+        """Path allowlist is enforced — clients can't probe arbitrary fields."""
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{plan.id}/rewrite/",
+            {"path": "user", "count": 3},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("不支持改写", resp.data["detail"])
+
+    def test_rewrite_rejects_malformed_path(self):
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{plan.id}/rewrite/",
+            {"path": "../etc/passwd"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rewrite_returns_400_when_target_is_missing(self):
+        """Path resolves to an out-of-range storyboard index — should 400, not 500."""
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{plan.id}/rewrite/",
+            {"path": "storyboard[42].line"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rewrite_is_user_scoped(self):
+        """A user cannot rewrite someone else's plan even if they know the UUID."""
+        other_plan = self.create_plan(user=self.other_user)
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{other_plan.id}/rewrite/",
+            {"path": "title"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch("apps.plans.views.rewrite_field")
+    def test_rewrite_passes_storyboard_context(self, mock_rewrite_field):
+        """Storyboard rewrites must hand the AI the current shot + neighbours."""
+        mock_rewrite_field.return_value = {"candidates": [{"value": "新台词", "reason": ""}]}
+        plan = self.create_plan()
+        self.authenticate()
+
+        resp = self.client.post(
+            f"/api/v1/plans/{plan.id}/rewrite/",
+            {"path": "storyboard[0].line"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        kwargs = mock_rewrite_field.call_args.kwargs
+        self.assertEqual(kwargs["current_value"], "欢迎观看")
+        self.assertIn("this_shot", kwargs["context"])
+        self.assertEqual(kwargs["context"]["this_shot"]["visual"], "开场画面")

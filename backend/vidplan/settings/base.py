@@ -76,6 +76,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -102,6 +105,13 @@ AI_DEFAULT_PROVIDER = env("AI_DEFAULT_PROVIDER", default="openai")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o")
 OPENAI_BASE_URL = env("OPENAI_BASE_URL", default="")
+
+# Self-critique pass: after generation, run a critic call against a
+# direction-specific rubric and trigger one revision pass when the score
+# is below the spec threshold or any critical/major issue is reported.
+# Trades 1-2x extra tokens for noticeably higher output quality on
+# flagship directions; can be disabled per-environment to save cost.
+AI_CRITIQUE_ENABLED = env.bool("AI_CRITIQUE_ENABLED", default=True)
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 AI_TASK_EXECUTION = env("AI_TASK_EXECUTION", default="sync")

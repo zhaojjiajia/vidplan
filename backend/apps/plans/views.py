@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from apps.ai.models import AITask
 from apps.ai.serializers import AITaskSerializer
+from apps.ai.services import AIPayloadError, build_creation_outline, review_plan, rewrite_field
 from apps.ai.task_runtime import (
     TrackedAITaskError,
     create_ai_task,
@@ -29,11 +30,20 @@ from .ai_workflows import (
     execute_optimize_plan_task,
 )
 from .models import SeriesPlan, VideoPlan
+from .path_resolver import (
+    PathError,
+    build_context,
+    field_kind_label,
+    is_rewritable,
+    resolve as resolve_path,
+)
 from .serializers import (
     ConsistencyCheckInputSerializer,
+    CreationOutlineInputSerializer,
     EpisodeGenerateInputSerializer,
     GenerateInputSerializer,
     OptimizeInputSerializer,
+    RewriteInputSerializer,
     SeriesGenerateInputSerializer,
     SeriesPlanSerializer,
     VideoPlanSerializer,
@@ -41,6 +51,14 @@ from .serializers import (
 
 
 ASYNC_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _next_episode_order(series: SeriesPlan, *, exclude_pk=None) -> int:
+    qs = series.episodes.all()
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    current = qs.order_by("-episode_order", "-created_at").values_list("episode_order", flat=True).first()
+    return int(current or 0) + 1
 
 
 def _with_task_id(payload, task: AITask) -> dict:
@@ -87,7 +105,32 @@ class VideoPlanViewSet(viewsets.ModelViewSet):
         return VideoPlan.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        plan = serializer.save(user=self.request.user)
+        if plan.series_id and not plan.episode_order:
+            plan.episode_order = _next_episode_order(plan.series, exclude_pk=plan.pk)
+            plan.save(update_fields=["episode_order", "updated_at"])
+
+    def perform_update(self, serializer):
+        previous_series_id = serializer.instance.series_id
+        had_explicit_order = "episode_order" in serializer.validated_data
+        plan = serializer.save()
+        if plan.series_id and previous_series_id != plan.series_id and not had_explicit_order:
+            plan.episode_order = _next_episode_order(plan.series, exclude_pk=plan.pk)
+            plan.save(update_fields=["episode_order", "updated_at"])
+        elif not plan.series_id and previous_series_id and not had_explicit_order and plan.episode_order:
+            plan.episode_order = 0
+            plan.save(update_fields=["episode_order", "updated_at"])
+
+    @action(detail=False, methods=["post"], url_path="outline")
+    def outline(self, request):
+        input_ser = CreationOutlineInputSerializer(data=request.data)
+        input_ser.is_valid(raise_exception=True)
+        data = dict(input_ser.validated_data)
+        try:
+            payload = build_creation_outline(user=request.user, **data)
+        except AIPayloadError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(payload)
 
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):
@@ -119,11 +162,12 @@ class VideoPlanViewSet(viewsets.ModelViewSet):
         input_ser = OptimizeInputSerializer(data=request.data)
         input_ser.is_valid(raise_exception=True)
         scope = input_ser.validated_data["scope"]
+        hint = input_ser.validated_data.get("hint", "")
         task = create_ai_task(
             user=request.user,
             task_type=AITask.TaskType.OPTIMIZE_PLAN,
             title=f"优化方案: {plan.title}",
-            input_payload={"plan_id": str(plan.id), "scope": scope},
+            input_payload={"plan_id": str(plan.id), "scope": scope, "hint": hint},
         )
 
         async_response = _enqueue_if_requested(request, task)
@@ -162,11 +206,87 @@ class VideoPlanViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="duplicate")
     def duplicate(self, request, pk=None):
         plan = self.get_object()
+        source_series = plan.series
         plan.pk = None
         plan.title = f"{plan.title} - 副本"[:200]
         plan.status = VideoPlan.Status.DRAFT
+        if source_series:
+            plan.episode_order = _next_episode_order(source_series)
+        else:
+            plan.episode_order = 0
         plan.save()
         return Response(VideoPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="review")
+    def review(self, request, pk=None):
+        """Run an on-demand AI critique against this plan.
+
+        Triggered by the editor when the user is about to confirm a plan;
+        results are shown in a modal so they can decide whether to proceed.
+        Always returns 200 with a CritiquePayload-shaped body — even if the
+        critic call itself failed (in which case score=0 + summary explains).
+        """
+        plan = self.get_object()
+        plan_dict = VideoPlanSerializer(plan).data
+        try:
+            payload = review_plan(user=request.user, plan_dict=plan_dict)
+        except Exception as exc:  # noqa: BLE001 — surface but don't raise
+            payload = {
+                "score": 0,
+                "axes": [],
+                "issues": [],
+                "summary": f"审稿失败: {type(exc).__name__}: {str(exc)[:200]}",
+            }
+        return Response(payload)
+
+    @action(detail=True, methods=["post"], url_path="rewrite")
+    def rewrite(self, request, pk=None):
+        """Inline AI rewrite for a single leaf field of the plan.
+
+        Path is validated against an allowlist (see path_resolver.LEAF_PATH_PATTERNS)
+        so callers can't probe arbitrary plan internals or rewrite structural
+        sections that would corrupt the editor's data shape.
+        """
+        plan = self.get_object()
+        input_ser = RewriteInputSerializer(data=request.data)
+        input_ser.is_valid(raise_exception=True)
+        path = input_ser.validated_data["path"]
+        hint = input_ser.validated_data.get("hint", "")
+        count = input_ser.validated_data.get("count", 3)
+
+        if not is_rewritable(path):
+            return Response(
+                {"detail": f"该字段不支持改写: {path}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        plan_dict = VideoPlanSerializer(plan).data
+        try:
+            current_value = resolve_path(plan_dict, path)
+        except PathError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(current_value, str):
+            return Response(
+                {"detail": "该字段当前不是文本,无法改写"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = rewrite_field(
+                user=request.user,
+                plan_dict=plan_dict,
+                path=path,
+                current_value=current_value,
+                field_kind=field_kind_label(path),
+                context=build_context(plan_dict, path),
+                hint=hint,
+                count=count,
+            )
+        except AIPayloadError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(payload)
 
 
 class SeriesPlanViewSet(viewsets.ModelViewSet):

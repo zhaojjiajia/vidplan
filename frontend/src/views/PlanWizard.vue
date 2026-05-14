@@ -1,173 +1,120 @@
 <template>
-  <div class="vp-page vp-page--narrow wizard">
-    <header class="head">
-      <div>
-        <h1>创建视频方案</h1>
-        <p class="hint">花一两分钟回答几个问题,AI 帮你生成完整的方案草稿。</p>
+  <div class="vp-page creator-page">
+    <section class="creator-shell">
+      <h1 v-if="!conversationMessages.length && !generating">说出你的灵感，生成可执行视频方案</h1>
+
+      <div v-if="generating || chatMessages.length" class="chat-stream">
+        <div
+          v-for="message in chatMessages"
+          :key="message.key"
+          :class="[
+            'chat-bubble',
+            `chat-bubble--${message.role}`,
+            { 'chat-bubble--thinking': message.key === 'thinking' },
+          ]"
+        >
+          <span>{{ message.text }}</span>
+        </div>
       </div>
-      <el-button text @click="$router.push('/app/me/plans')">返回方案列表</el-button>
-    </header>
 
-    <div class="wizard-shell">
-      <aside class="wizard-rail">
-        <div class="rail-card">
-          <div class="rail-title">创建进度</div>
-          <ol class="rail-steps">
-            <li v-for="(item, index) in wizardSteps" :key="item" :class="{ active: step === index, done: step > index }">
-              <span>{{ index + 1 }}</span>
-              <strong>{{ item }}</strong>
-            </li>
-          </ol>
-          <div class="rail-summary">
-            <div>
-              <span>方向</span>
-              <strong>{{ selectedDirectionLabel }}</strong>
-            </div>
-            <div>
-              <span>类型</span>
-              <strong>{{ typeLabel }}</strong>
-            </div>
-            <div>
-              <span>想法</span>
-              <p>{{ ideaPreview }}</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+      <div
+        class="ai-composer"
+        :class="{ dragging: ideaDragging, generating }"
+        @dragenter.prevent="ideaDragging = true"
+        @dragover.prevent="ideaDragging = true"
+        @dragleave="onIdeaDragLeave"
+        @drop.prevent="onIdeaDrop"
+      >
+        <textarea
+          v-model="form.idea"
+          :disabled="generating"
+          class="composer-input"
+          :placeholder="composerPlaceholder"
+          rows="4"
+          @keydown.meta.enter.prevent="onSubmitComposer"
+          @keydown.ctrl.enter.prevent="onSubmitComposer"
+        />
 
-      <section class="card">
-        <el-steps :active="step" finish-status="success" simple class="steps">
-          <el-step title="选择方向" />
-          <el-step title="选择类型" />
-          <el-step title="填写想法" />
-          <el-step title="AI 生成" />
-        </el-steps>
-
-        <div v-if="step === 0" class="step">
-          <DirectionPicker
-            v-model:category="picker.category"
-            v-model:direction="picker.direction"
-          />
-          <div class="actions">
-            <span />
-            <el-button type="primary" :disabled="!picker.direction" @click="step = 1">
-              下一步<el-icon class="el-icon--right"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
+        <div v-if="ideaDragging" class="drop-overlay">
+          <el-icon><Upload /></el-icon>
+          <span>松开即可导入</span>
         </div>
 
-        <div v-else-if="step === 1" class="step">
-          <h3>选择创作类型</h3>
-          <p class="hint">单条方案适合独立短片,系列方案让人设、风格、栏目长期复用。</p>
-          <div class="type-grid">
-            <div
-              :class="['type-card', { active: planType === 'single' }]"
-              role="button" tabindex="0"
+        <div class="composer-bar">
+          <div class="mode-tabs" aria-label="创建模式">
+            <button
+              type="button"
+              :class="['mode-pill', { active: planType === 'single' }]"
+              :disabled="generating || !!currentOutline"
               @click="planType = 'single'"
-              @keydown.enter.space.prevent="planType = 'single'"
             >
-              <div class="type-icon"><el-icon><Document /></el-icon></div>
-              <h4>单条视频方案</h4>
-              <p class="hint">适合 Vlog、教程、口播、单条短片</p>
-            </div>
-            <div
-              :class="['type-card', { active: planType === 'series' }]"
-              role="button" tabindex="0"
+              单条模式
+            </button>
+            <button
+              type="button"
+              :class="['mode-pill', { active: planType === 'series' }]"
+              :disabled="generating || !!currentOutline"
               @click="planType = 'series'"
-              @keydown.enter.space.prevent="planType = 'series'"
             >
-              <div class="type-icon"><el-icon><Files /></el-icon></div>
-              <h4>系列视频方案</h4>
-              <p class="hint">适合短剧、IP 账号、栏目化连载内容</p>
-            </div>
+              系列模式
+            </button>
           </div>
-          <div class="actions">
-            <el-button @click="step = 0">上一步</el-button>
-            <el-button type="primary" @click="onTypeNext">
-              {{ planType === 'series' ? '创建系列方案' : '下一步' }}
-              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
 
-        <div v-else-if="step === 2" class="step">
-          <h3>填写创作想法</h3>
-          <p class="hint">想法描述越具体,AI 生成得越准。</p>
-          <el-form :model="form" label-position="top" class="form">
-            <el-form-item>
-              <template #label>
-                <span>想法描述</span>
-                <span class="label-hint">或直接拖入Markdown 文件</span>
-              </template>
-              <div
-                class="idea-drop"
-                :class="{ dragging: ideaDragging }"
-                @dragenter.prevent="ideaDragging = true"
-                @dragover.prevent="ideaDragging = true"
-                @dragleave="onIdeaDragLeave"
-                @drop.prevent="onIdeaDrop"
-              >
-                <el-input
-                  v-model="form.idea"
-                  type="textarea"
-                  :rows="5"
-                  placeholder="例: 一条 30 秒的 AI 美女写真,西湖边漫步,秋天的氛围,温柔治愈感"
-                />
-                <div v-if="ideaDragging" class="drop-overlay">
-                  <el-icon><Upload /></el-icon>
-                  <span>松开即可导入</span>
-                </div>
-              </div>
-            </el-form-item>
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item label="目标平台">
-                  <el-select v-model="form.target_platform" style="width:100%">
-                    <el-option label="抖音" value="抖音" />
-                    <el-option label="小红书" value="小红书" />
-                    <el-option label="快手" value="快手" />
-                    <el-option label="B 站" value="B站" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="时长 (秒)">
-                  <el-input-number v-model="form.duration_seconds" :min="5" :max="600" style="width:100%" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item label="目标观众">
-                  <el-input v-model="form.target_audience" placeholder="例: 25-35 岁都市白领" />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="内容风格">
-                  <el-input v-model="form.style" placeholder="例: 治愈、悬疑、轻松搞笑" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <el-form-item v-if="picker.category === 'real'">
-              <el-checkbox v-model="form.is_ai_generated_video">本视频部分画面也需要 AI 生成</el-checkbox>
-            </el-form-item>
-          </el-form>
-          <div class="actions">
-            <el-button @click="step = 1">上一步</el-button>
-            <el-button type="primary" :loading="generating" :disabled="!form.idea" @click="onGenerate">
-              <el-icon class="el-icon--left"><MagicStick /></el-icon>
-              AI 生成方案
-            </el-button>
+          <div class="composer-actions">
+            <input
+              ref="fileInputRef"
+              class="file-input"
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              @change="onFilePicked"
+            />
+            <button
+              type="button"
+              class="icon-button"
+              title="导入 Markdown"
+              :disabled="generating"
+              @click="triggerFilePicker"
+            >
+              <el-icon><Paperclip /></el-icon>
+            </button>
+            <button
+              type="button"
+              class="send-button"
+              :title="sendButtonTitle"
+              :disabled="generating || !canSubmitComposer"
+              @click="onSubmitComposer"
+            >
+              <el-icon v-if="!generating"><Top /></el-icon>
+              <span v-else class="send-loading" />
+            </button>
           </div>
         </div>
+      </div>
 
-        <div v-else-if="step === 3" class="generating">
-          <el-progress type="circle" :percentage="taskProgress" :width="120" :stroke-width="6" v-if="generating" />
-          <p>{{ generating ? taskMessage : '生成完成,正在跳转编辑器…' }}</p>
-          <p class="hint">可以放心切走,任务会在后台继续。</p>
-        </div>
-      </section>
-    </div>
+      <div v-if="currentOutline && !generating" class="outline-actions">
+        <button type="button" class="outline-action outline-action--primary" @click="approveOutlineAndGenerate">
+          <el-icon><Check /></el-icon>
+          <span>同意大纲，生成详细方案</span>
+        </button>
+        <button type="button" class="outline-action" @click="resetOutlineDraft">
+          <el-icon><RefreshLeft /></el-icon>
+          <span>重新开始</span>
+        </button>
+      </div>
+
+      <div v-if="!currentOutline" class="idea-examples" aria-label="方向灵感">
+        <button
+          v-for="example in ideaExamples"
+          :key="example.title"
+          type="button"
+          :disabled="generating"
+          @click="applyIdeaExample(example)"
+        >
+          <span>{{ example.title }}</span>
+          <small>{{ example.prompt }}</small>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -175,13 +122,13 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Document, Files, MagicStick, Upload } from '@element-plus/icons-vue'
+import { Check, Paperclip, RefreshLeft, Top, Upload } from '@element-plus/icons-vue'
 
 import { isAITaskResponse } from '@/api/aiTasks'
 import type { PlanMarkdownImportData } from '@/api/markdownImport'
-import DirectionPicker from '@/components/DirectionPicker.vue'
 import { plansApi } from '@/api/plans'
-import { findDirectionLabel, type Category } from '@/data/directions'
+import type { CreationOutline } from '@/api/plans'
+import { seriesApi } from '@/api/series'
 import type { AITask } from '@/types/api'
 import {
   extractMarkdownNumber,
@@ -195,44 +142,152 @@ import {
   waitForAITask,
 } from '@/utils/aiTaskRecovery'
 
-const router = useRouter()
+type PlanType = 'single' | 'series'
+type ChatMessage = { key: string; role: 'user' | 'ai'; text: string }
+type IdeaExample = { title: string; prompt: string; mode: PlanType }
 
-const step = ref(0)
-const picker = reactive<{ category: Category | ''; direction: string }>({ category: '', direction: '' })
-const planType = ref<'single' | 'series'>('single')
-const wizardSteps = ['选择方向', '选择类型', '填写想法', 'AI 生成']
+const router = useRouter()
+const planType = ref<PlanType>('single')
+const generating = ref(false)
+const generationPhase = ref<'outline' | 'detail'>('detail')
+const ideaDragging = ref(false)
+const taskProgress = ref(10)
+const taskMessage = ref('AI 正在生成方案...')
+const elapsedSeconds = ref(0)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const currentOutline = ref<CreationOutline | null>(null)
+const outlineSeed = ref('')
+const outlineFeedbacks = ref<string[]>([])
+const conversationMessages = ref<ChatMessage[]>([])
+let taskAbortController: AbortController | null = null
+let elapsedTimer: number | null = null
 
 const form = reactive({
   idea: '',
-  target_platform: '抖音',
   target_audience: '',
   duration_seconds: 30,
   style: '',
-  is_ai_generated_video: false,
 })
 
-const generating = ref(false)
-const ideaDragging = ref(false)
-const taskProgress = ref(10)
-const taskMessage = ref('AI 正在生成方案,通常 10-30 秒…')
-let taskAbortController: AbortController | null = null
+const ideaExamples: IdeaExample[] = [
+  {
+    title: 'AI 悬疑短剧',
+    prompt: '校园里每个人都收到同一条未来短信,60 秒反转收尾',
+    mode: 'series',
+  },
+  {
+    title: '探店反差脚本',
+    prompt: '一家看起来普通的小店,最后发现隐藏招牌菜',
+    mode: 'single',
+  },
+  {
+    title: '知识口播',
+    prompt: '用 30 秒讲清一个普通人容易踩坑的 AI 工具用法',
+    mode: 'single',
+  },
+  {
+    title: '治愈日常系列',
+    prompt: '一个独居女孩和城市角落的温暖小事,每集 60 秒',
+    mode: 'series',
+  },
+  {
+    title: '产品种草',
+    prompt: '把一个智能硬件做成先痛点后解决方案的种草视频',
+    mode: 'single',
+  },
+  {
+    title: '人物关系剧',
+    prompt: '三个人在同一个虚拟空间里互相隐瞒身份,做成连载短剧',
+    mode: 'series',
+  },
+]
 
-const selectedDirectionLabel = computed(() => picker.direction ? findDirectionLabel(picker.direction) : '未选择')
-const typeLabel = computed(() => planType.value === 'series' ? '系列视频方案' : '单条视频方案')
-const ideaPreview = computed(() => {
-  const idea = form.idea.trim()
-  return idea ? (idea.length > 52 ? `${idea.slice(0, 52)}…` : idea) : '未填写'
-})
+const composerPlaceholder = computed(() => (
+  currentOutline.value ? '补充你想调整的大纲内容...' : '描述你想做的视频或系列...'
+))
 
-function onTypeNext() {
-  if (planType.value === 'series') {
-    router.push('/app/series/new')
-    return
+const sendButtonTitle = computed(() => (
+  currentOutline.value ? '补充大纲' : '生成大纲'
+))
+
+const canSubmitComposer = computed(() => Boolean(form.idea.trim()))
+
+const chatMessages = computed<ChatMessage[]>(() => {
+  const messages: ChatMessage[] = [...conversationMessages.value]
+  if (generating.value) {
+    messages.push({
+      key: 'thinking',
+      role: 'ai',
+      text: activeGeneratingText.value,
+    })
   }
-  step.value = 2
+  return messages
+})
+
+const generationStages = [
+  {
+    threshold: 0,
+    single: '我在理解你的想法,准备拆成短视频结构。',
+    series: '我在理解你的系列设定,准备拆出可连载的核心结构。',
+  },
+  {
+    threshold: 4,
+    single: '我在设计钩子、节奏和章节结构。',
+    series: '我在设计系列定位、人物/环境资产和单集节奏。',
+  },
+  {
+    threshold: 10,
+    single: '我在整理章节内容、核心看点和交付建议。',
+    series: '我在整理人物设定、环境设定、选题池和系列模板。',
+  },
+  {
+    threshold: 18,
+    single: '我在校验输出格式,马上进入可编辑方案。',
+    series: '我在校验系列方案,马上进入系列工作台。',
+  },
+]
+
+const activeGeneratingText = computed(() => {
+  if (generationPhase.value === 'outline') {
+    return `我先把内容整理成待确认的大纲。 ${taskMessage.value ? `(${taskMessage.value})` : ''}`
+  }
+  const stage = [...generationStages]
+    .reverse()
+    .find((item) => elapsedSeconds.value >= item.threshold) || generationStages[0]
+  const base = planType.value === 'series' ? stage.series : stage.single
+  return `${base} ${taskMessage.value ? `(${taskMessage.value})` : ''}`
+})
+
+function startElapsedClock() {
+  const startedAt = Date.now()
+  elapsedSeconds.value = 0
+  if (elapsedTimer !== null) window.clearInterval(elapsedTimer)
+  elapsedTimer = window.setInterval(() => {
+    elapsedSeconds.value = Math.floor((Date.now() - startedAt) / 1000)
+  }, 250)
+}
+
+function stopElapsedClock() {
+  if (elapsedTimer !== null) {
+    window.clearInterval(elapsedTimer)
+    elapsedTimer = null
+  }
+}
+
+function triggerFilePicker() {
+  fileInputRef.value?.click()
+}
+
+async function onFilePicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  importPlanMarkdown(await file.text(), '已导入文件内容')
+  input.value = ''
 }
 
 function importPlanMarkdown(text: string, successMessage: string) {
+  resetOutlineDraft()
   const local = parsePlanMarkdown(text)
   applyPlanImportValues(local)
   ElMessage.success(successMessage)
@@ -241,14 +296,12 @@ function importPlanMarkdown(text: string, successMessage: string) {
 function parsePlanMarkdown(text: string): PlanMarkdownImportData {
   const plain = markdownToPlain(text)
   const idea = extractMarkdownValue(text, ['想法描述', '创作想法', '想法', '方案', '简介', '摘要', '内容'])
-  const platform = extractMarkdownValue(text, ['目标平台', '平台', '发布平台'])
   const audience = extractMarkdownValue(text, ['目标观众', '目标受众', '受众', '观众'])
   const style = extractMarkdownValue(text, ['内容风格', '风格', '调性'])
   const duration = extractPlanDuration(text)
 
   return {
     idea: idea || plain,
-    target_platform: platform ? normalizePlatform(platform) : '',
     target_audience: audience,
     duration_seconds: duration,
     style,
@@ -257,12 +310,17 @@ function parsePlanMarkdown(text: string): PlanMarkdownImportData {
 
 function applyPlanImportValues(values: PlanMarkdownImportData) {
   if (values.idea) form.idea = values.idea
-  if (values.target_platform) form.target_platform = normalizePlatform(values.target_platform)
   if (values.target_audience) form.target_audience = values.target_audience
   if (values.style) form.style = values.style
   if (values.duration_seconds) {
     form.duration_seconds = Math.min(600, Math.max(5, Math.round(values.duration_seconds)))
   }
+}
+
+function applyIdeaExample(example: IdeaExample) {
+  resetOutlineDraft()
+  planType.value = example.mode
+  form.idea = example.prompt
 }
 
 async function onIdeaDrop(event: DragEvent) {
@@ -302,66 +360,207 @@ function extractPlanDuration(text: string) {
   return match ? Number(match[1]) : null
 }
 
-function normalizePlatform(value: string) {
-  if (/小红书/.test(value)) return '小红书'
-  if (/抖音/.test(value)) return '抖音'
-  if (/快手/.test(value)) return '快手'
-  if (/B\s*站|bilibili/i.test(value)) return 'B站'
-  return value.trim()
+async function onSubmitComposer() {
+  if (!form.idea.trim() || generating.value) return
+
+  try {
+    await requestOutline(form.idea.trim())
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '大纲整理失败')
+  }
 }
 
-async function onGenerate() {
-  if (!picker.category || !picker.direction) {
-    ElMessage.warning('请回到第一步选择方向')
-    return
+async function requestOutline(input: string) {
+  const isFirstOutline = !currentOutline.value
+  const previousSeed = outlineSeed.value
+  const previousFeedbacks = [...outlineFeedbacks.value]
+  const previousMessages = [...conversationMessages.value]
+  if (isFirstOutline) {
+    outlineSeed.value = input
+    outlineFeedbacks.value = []
+    conversationMessages.value = [{ key: `user-${Date.now()}`, role: 'user', text: input }]
+  } else {
+    outlineFeedbacks.value.push(input)
+    conversationMessages.value.push({ key: `user-${Date.now()}`, role: 'user', text: input })
   }
+
   generating.value = true
+  generationPhase.value = 'outline'
   taskProgress.value = 10
-  taskMessage.value = 'AI 正在生成方案,通常 10-30 秒…'
-  step.value = 3
+  taskMessage.value = 'AI 正在整理简单大纲...'
+  startElapsedClock()
   try {
-    const result = await plansApi.generate({
-      direction: picker.direction,
-      category: picker.category,
-      is_ai_generated_video: picker.category === 'ai_generated' ? true : form.is_ai_generated_video,
-      idea: form.idea,
-      target_platform: form.target_platform,
+    const outline = await plansApi.outline({
+      plan_type: planType.value,
+      direction: '',
+      idea: outlineSeed.value,
       target_audience: form.target_audience,
-      duration_seconds: form.duration_seconds,
       style: form.style,
+      previous_outline: currentOutline.value ? formatOutlinePlain(currentOutline.value) : '',
+      feedback: isFirstOutline ? '' : input,
     })
-    if (isAITaskResponse(result)) {
-      saveActiveAITask({
-        taskId: result.id,
-        taskType: 'generate_plan',
-        label: '生成单条方案',
-        createdAt: new Date().toISOString(),
-      })
-      await followGenerateTask(result)
-      return
-    }
-    router.push(`/app/plan/${result.id}`)
-  } catch {
-    step.value = 2
+    currentOutline.value = outline
+    conversationMessages.value.push({
+      key: `ai-outline-${Date.now()}`,
+      role: 'ai',
+      text: formatOutlineMessage(outline),
+    })
+    form.idea = ''
+  } catch (err) {
+    outlineSeed.value = previousSeed
+    outlineFeedbacks.value = previousFeedbacks
+    conversationMessages.value = previousMessages
+    throw err
   } finally {
     generating.value = false
+    stopElapsedClock()
   }
 }
 
-async function followGenerateTask(task: AITask) {
+async function approveOutlineAndGenerate() {
+  if (!currentOutline.value || generating.value) return
+
+  generating.value = true
+  generationPhase.value = 'detail'
+  taskProgress.value = 10
+  taskMessage.value = planType.value === 'series' ? 'AI 正在生成系列方案...' : 'AI 正在生成方案...'
+  startElapsedClock()
+  try {
+    const idea = buildDetailedIdea()
+    if (planType.value === 'series') {
+      await generateSeries(idea)
+    } else {
+      await generateSingle(idea)
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : 'AI 生成失败')
+  } finally {
+    generating.value = false
+    stopElapsedClock()
+  }
+}
+
+async function generateSingle(idea: string) {
+  const result = await plansApi.generate({
+    direction: '',
+    category: 'real',
+    is_ai_generated_video: false,
+    idea,
+    target_platform: '',
+    target_audience: form.target_audience,
+    duration_seconds: form.duration_seconds,
+    style: form.style,
+  })
+  if (isAITaskResponse(result)) {
+    saveActiveAITask({
+      taskId: result.id,
+      taskType: 'generate_plan',
+      label: '生成单条方案',
+      createdAt: new Date().toISOString(),
+    })
+    await followGenerateTask(result, 'single')
+    return
+  }
+  router.push(`/app/plan/${result.id}`)
+}
+
+async function generateSeries(idea: string) {
+  const result = await seriesApi.generate({
+    direction: '',
+    idea,
+    target_platform: '',
+    target_audience: form.target_audience,
+    update_frequency: '周更',
+    episode_duration_seconds: 60,
+    planned_episodes: 10,
+    style: form.style,
+    auto_create_assets: true,
+  })
+  if (isAITaskResponse(result)) {
+    saveActiveAITask({
+      taskId: result.id,
+      taskType: 'generate_series',
+      label: '生成系列方案',
+      createdAt: new Date().toISOString(),
+    })
+    await followGenerateTask(result, 'series')
+    return
+  }
+  router.push(`/app/series/${result.id}`)
+}
+
+function formatOutlineMessage(outline: CreationOutline) {
+  const lines = [`大纲: ${outline.title || '未命名'}`]
+  if (outline.summary) lines.push(outline.summary)
+  const meta = [
+    outline.direction_label,
+    outline.audience,
+    outline.style,
+  ].filter(Boolean)
+  if (meta.length) lines.push(meta.join(' · '))
+  outline.outline.forEach((item, index) => {
+    const title = item.title || `第 ${index + 1} 部分`
+    lines.push(`${index + 1}. ${title}${item.note ? `: ${item.note}` : ''}`)
+  })
+  if (outline.key_points.length) {
+    lines.push(`确认点: ${outline.key_points.join('；')}`)
+  }
+  return lines.join('\n')
+}
+
+function formatOutlinePlain(outline: CreationOutline) {
+  return [
+    `标题: ${outline.title}`,
+    `摘要: ${outline.summary}`,
+    `方向: ${outline.direction_label || outline.direction}`,
+    `观众: ${outline.audience}`,
+    `风格: ${outline.style}`,
+    '大纲:',
+    ...outline.outline.map((item, index) => `${index + 1}. ${item.title}${item.note ? ` - ${item.note}` : ''}`),
+    outline.key_points.length ? `确认点: ${outline.key_points.join('；')}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function buildDetailedIdea() {
+  const parts = [
+    `用户原始内容:\n${outlineSeed.value}`,
+    `用户已确认的大纲:\n${currentOutline.value ? formatOutlinePlain(currentOutline.value) : ''}`,
+  ]
+  if (outlineFeedbacks.value.length) {
+    parts.push(`用户补充要求:\n${outlineFeedbacks.value.join('\n')}`)
+  }
+  return parts.join('\n\n')
+}
+
+function resetOutlineDraft() {
+  currentOutline.value = null
+  outlineSeed.value = ''
+  outlineFeedbacks.value = []
+  conversationMessages.value = []
+}
+
+async function followGenerateTask(task: AITask, type: PlanType) {
   taskAbortController?.abort()
   taskAbortController = new AbortController()
   taskProgress.value = Math.max(task.progress || 0, 10)
-  taskMessage.value = task.status === 'queued' ? 'AI 任务已排队,正在等待执行…' : 'AI 正在生成方案…'
+  taskMessage.value = task.status === 'queued' ? 'AI 任务已排队,正在等待执行...' : 'AI 正在生成...'
   try {
     const finished = await waitForAITask(task.id, {
       signal: taskAbortController.signal,
       onUpdate: (latest) => {
         taskProgress.value = Math.max(latest.progress || 0, 10)
-        taskMessage.value = latest.status === 'queued' ? 'AI 任务已排队,正在等待执行…' : 'AI 正在生成方案…'
+        taskMessage.value = latest.status === 'queued' ? 'AI 任务已排队,正在等待执行...' : 'AI 正在生成...'
       },
     })
     removeActiveAITask(task.id)
+    if (type === 'series') {
+      const seriesId = typeof finished.result_payload.series_id === 'string' ? finished.result_payload.series_id : ''
+      if (!seriesId) throw new Error('AI 任务已完成,但未返回系列 ID')
+      ElMessage.success('AI 生成完成')
+      router.push(`/app/series/${seriesId}`)
+      return
+    }
+
     const planId = typeof finished.result_payload.plan_id === 'string' ? finished.result_payload.plan_id : ''
     if (!planId) throw new Error('AI 任务已完成,但未返回方案 ID')
     ElMessage.success('AI 生成完成')
@@ -370,15 +569,18 @@ async function followGenerateTask(task: AITask) {
     if (isAbortError(err)) return
     removeActiveAITask(task.id)
     ElMessage.error(err instanceof Error ? err.message : 'AI 生成失败')
-    step.value = 2
   }
 }
 
 onMounted(async () => {
-  const active = findActiveAITask('generate_plan')
+  const activePlan = findActiveAITask('generate_plan')
+  const activeSeries = findActiveAITask('generate_series')
+  const active = activePlan || activeSeries
   if (!active) return
+  planType.value = active.taskType === 'generate_series' ? 'series' : 'single'
   generating.value = true
-  step.value = 3
+  generationPhase.value = 'detail'
+  startElapsedClock()
   await followGenerateTask({
     id: active.taskId,
     task_type: active.taskType,
@@ -394,12 +596,13 @@ onMounted(async () => {
     finished_at: null,
     created_at: active.createdAt,
     updated_at: active.createdAt,
-  })
+  }, planType.value)
   generating.value = false
 })
 
 onBeforeUnmount(() => {
   taskAbortController?.abort()
+  stopElapsedClock()
 })
 
 function isAbortError(err: unknown) {
@@ -408,210 +611,332 @@ function isAbortError(err: unknown) {
 </script>
 
 <style scoped>
-.wizard { padding-top: 32px; max-width: 1120px; }
-.head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.head h1 { font-size: 26px; margin-bottom: 6px; }
-.hint { color: var(--vp-text-3); font-size: 13.5px; line-height: 1.55; }
-
-.wizard-shell {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
-}
-.wizard-rail { position: sticky; top: 24px; }
-.rail-card {
-  border: 1px solid var(--vp-border);
-  border-radius: var(--vp-r-lg);
-  background: var(--vp-surface);
-  padding: 16px;
-  box-shadow: var(--vp-shadow-xs);
-}
-.rail-title {
-  color: var(--vp-text-1);
-  font-size: 13px;
-  font-weight: 650;
-  margin-bottom: 12px;
-}
-.rail-steps {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  margin: 0 0 16px;
-}
-.rail-steps li {
+.creator-page {
+  min-height: calc(100vh - var(--vp-topbar-h));
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
-  color: var(--vp-text-3);
+  justify-content: center;
+  padding: 44px 18px 92px;
+  background: transparent;
 }
-.rail-steps span {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+.creator-shell {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.creator-shell h1 {
+  margin: 0;
+  color: var(--vp-text-1);
+  font-size: 42px;
+  line-height: 1.18;
+  font-weight: 780;
+  text-align: center;
+  letter-spacing: 0;
+  text-shadow: 0 2px 12px rgba(255, 250, 246, .86), 0 1px 0 rgba(255, 255, 255, .72);
+}
+.chat-stream {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-bubble {
+  max-width: min(680px, 92%);
+  border-radius: 18px;
+  padding: 12px 16px;
+  font-size: 16px;
+  line-height: 1.65;
+  backdrop-filter: blur(14px) saturate(132%);
+}
+.chat-bubble span {
+  white-space: pre-line;
+}
+.chat-bubble--user {
+  align-self: flex-end;
+  color: var(--vp-text-1);
+  background: rgba(255, 255, 255, .66);
+}
+.chat-bubble--ai {
+  align-self: flex-start;
+  color: var(--vp-text-2);
+  background: color-mix(in srgb, var(--vp-primary-soft) 44%, rgba(255, 255, 255, .68));
+}
+.chat-bubble--thinking {
+  color: var(--vp-primary);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .64), rgba(255, 255, 255, .28)),
+    color-mix(in srgb, var(--vp-primary-soft) 72%, transparent);
+  box-shadow: 0 14px 38px rgba(84, 40, 36, .08);
+  position: relative;
+  overflow: hidden;
+}
+.chat-bubble--thinking::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, .52) 45%, transparent 72%);
+  transform: translateX(-100%);
+  animation: thinking-shine 1.8s ease-in-out infinite;
+}
+.ai-composer {
+  position: relative;
+  width: 100%;
+  min-height: 124px;
+  border: 1px solid rgba(94, 78, 70, .14);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, .58);
+  box-shadow: 0 24px 70px rgba(84, 40, 36, .12), 0 1px 0 rgba(255, 255, 255, .72) inset;
+  backdrop-filter: blur(18px) saturate(148%);
+  padding: 18px 16px 12px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.ai-composer:focus-within,
+.ai-composer.dragging {
+  border-color: color-mix(in srgb, var(--vp-primary) 42%, rgba(94, 105, 111, .18));
+  background: rgba(255, 255, 255, .68);
+  box-shadow: 0 28px 80px rgba(84, 40, 36, .16), 0 0 0 3px color-mix(in srgb, var(--vp-primary-soft) 76%, transparent);
+}
+.ai-composer.generating {
+  opacity: .86;
+}
+.composer-input {
+  width: 100%;
+  height: 86px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vp-text-1);
+  font: inherit;
+  font-size: 16.5px;
+  line-height: 1.6;
+  padding: 0;
+}
+.composer-input::placeholder {
+  color: color-mix(in srgb, var(--vp-text-3) 72%, white);
+}
+.composer-bar {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mode-tabs,
+.composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mode-pill {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(88, 100, 107, .14);
+  background: rgba(255, 255, 255, .56);
+  color: var(--vp-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.mode-pill:hover {
+  color: var(--vp-primary);
+}
+.mode-pill.active {
+  border-color: color-mix(in srgb, var(--vp-primary) 38%, rgba(88, 100, 107, .14));
+  background: var(--vp-primary-soft);
+  color: var(--vp-primary);
+}
+.file-input {
+  display: none;
+}
+.icon-button,
+.send-button {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--vp-border);
-  background: var(--vp-surface-alt);
-  font-size: 12px;
-  font-weight: 650;
-  flex-shrink: 0;
-}
-.rail-steps strong { font-size: 13px; font-weight: 600; }
-.rail-steps li.active,
-.rail-steps li.done { color: var(--vp-primary); }
-.rail-steps li.active span,
-.rail-steps li.done span {
-  border-color: var(--vp-primary);
-  background: var(--vp-primary-soft);
-}
-.rail-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--vp-divider);
-}
-.rail-summary span {
-  display: block;
-  color: var(--vp-text-3);
-  font-size: 12px;
-  margin-bottom: 3px;
-}
-.rail-summary strong,
-.rail-summary p {
-  color: var(--vp-text-1);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.steps { margin: 0 0 24px; }
-:deep(.el-steps--simple) { background: transparent; padding: 0; }
-
-.card {
-  background: var(--vp-surface);
-  border: 1px solid var(--vp-border);
-  border-radius: var(--vp-r-xl);
-  padding: 28px;
-  box-shadow: var(--vp-shadow-xs);
-}
-
-.step h3 { font-size: 18px; margin-bottom: 4px; }
-.step .hint { margin-bottom: 18px; }
-
-.type-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin: 18px 0; }
-.type-card {
   cursor: pointer;
-  background: var(--vp-surface);
-  border: 1px solid var(--vp-border);
-  border-radius: var(--vp-r-lg);
-  padding: 22px 20px;
-  transition: border-color .15s ease, background .15s ease, transform .15s ease;
-  position: relative;
 }
-.type-card:hover {
-  border-color: var(--vp-border-strong);
-  transform: translateY(-1px);
+.icon-button {
+  background: transparent;
+  color: var(--vp-text-2);
 }
-.type-card.active {
-  border-color: var(--vp-primary);
+.icon-button:hover {
+  color: var(--vp-primary);
   background: var(--vp-primary-soft);
-  box-shadow: 0 0 0 1px var(--vp-primary) inset;
-  transform: none;
 }
-.type-card.active::after {
-  /* 选中右上角对勾 */
-  content: "✓";
-  position: absolute;
-  top: 12px; right: 14px;
-  width: 22px; height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: var(--vp-primary);
+.send-button {
+  background: color-mix(in srgb, var(--vp-primary) 74%, #9fb5ff);
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
 }
-.type-icon {
-  width: 36px; height: 36px;
-  border-radius: var(--vp-r-md);
-  background: var(--vp-primary-soft); color: var(--vp-primary);
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-bottom: 12px;
+.send-button:hover {
+  background: var(--vp-primary);
 }
-.type-card.active .type-icon { background: var(--vp-primary); color: #fff; }
-.type-icon :deep(svg) { width: 18px; height: 18px; }
-.type-card h4 { margin-bottom: 4px; font-size: 15px; }
-
-.form { margin-top: 16px; }
-
-.idea-drop {
-  position: relative;
-  width: 100%;
-  padding: 8px;
-  border: 1px dashed transparent;
-  border-radius: var(--vp-r-md);
-  transition: border-color .15s ease, background .15s ease;
+.send-button:disabled,
+.mode-pill:disabled,
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: .56;
 }
-.idea-drop.dragging {
-  border-color: var(--vp-primary);
-  background: var(--vp-primary-soft);
+.send-loading {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .48);
+  border-top-color: #fff;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes thinking-shine {
+  to { transform: translateX(100%); }
 }
 .drop-overlay {
   position: absolute;
-  inset: 8px;
+  inset: 10px;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: var(--vp-r-sm);
+  border-radius: 18px;
   background: color-mix(in srgb, var(--vp-surface) 78%, var(--vp-primary-soft));
   color: var(--vp-primary);
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
   pointer-events: none;
 }
-.drop-overlay :deep(svg) {
-  width: 18px;
-  height: 18px;
+
+.outline-actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
-.label-hint {
-  margin-left: 8px;
-  color: var(--vp-text-3);
-  font-size: 14px;
-  font-weight: 400;
+.outline-action {
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 999px;
+  border: 1px solid rgba(88, 100, 107, .14);
+  background: rgba(255, 255, 255, .58);
+  color: var(--vp-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(84, 40, 36, .07);
 }
-.actions {
-  margin-top: 28px;
-  display: flex; justify-content: space-between; gap: 12px;
+.outline-action:hover {
+  color: var(--vp-primary);
+  border-color: color-mix(in srgb, var(--vp-primary) 34%, rgba(88, 100, 107, .14));
+  background: rgba(255, 255, 255, .7);
+}
+.outline-action--primary {
+  border-color: color-mix(in srgb, var(--vp-primary) 44%, transparent);
+  background: var(--vp-primary);
+  color: #fff;
+}
+.outline-action--primary:hover {
+  background: color-mix(in srgb, var(--vp-primary) 86%, #fff);
+  color: #fff;
 }
 
-.generating {
-  text-align: center; padding: 32px 0 16px;
-  display: flex; flex-direction: column; align-items: center; gap: 16px;
+.idea-examples {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
-.generating p { font-size: 14px; color: var(--vp-text-2); }
-.generating .hint { font-size: 12.5px; }
+.idea-examples button {
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid rgba(94, 78, 70, .11);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .46);
+  backdrop-filter: blur(14px) saturate(132%);
+  color: var(--vp-text-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  text-align: left;
+  box-shadow: 0 12px 30px rgba(84, 40, 36, .07);
+  transition: border-color .15s, background .15s, transform .15s, box-shadow .15s;
+}
+.idea-examples button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--vp-primary) 34%, rgba(94, 78, 70, .11));
+  background: rgba(255, 255, 255, .62);
+  box-shadow: 0 16px 36px rgba(84, 40, 36, .10);
+}
+.idea-examples button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+.idea-examples span {
+  color: var(--vp-text-1);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.2;
+}
+.idea-examples small {
+  color: var(--vp-text-3);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 @media (max-width: 720px) {
-  .head { flex-direction: column; }
-  .wizard-shell { grid-template-columns: 1fr; }
-  .wizard-rail { position: static; }
-  .type-grid { grid-template-columns: 1fr; }
-  .card { padding: 20px; }
-  .steps { display: none; }
-  .form :deep(.el-col) {
-    max-width: 100%;
-    flex: 0 0 100%;
+  .creator-page {
+    align-items: flex-start;
+    padding-top: 54px;
+  }
+  .creator-shell h1 {
+    font-size: 30px;
+  }
+  .composer-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .composer-actions {
+    justify-content: flex-end;
+  }
+  .mode-tabs {
+    width: 100%;
+  }
+  .mode-pill {
+    flex: 1;
+  }
+  .idea-examples {
+    grid-template-columns: 1fr;
+  }
+  .outline-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .outline-action {
+    justify-content: center;
+    width: 100%;
+  }
+  .idea-examples button {
+    min-height: 64px;
   }
 }
 </style>
