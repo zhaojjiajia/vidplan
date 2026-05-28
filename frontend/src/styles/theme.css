@@ -119,6 +119,39 @@
   --el-font-size-base: 18px;
 }
 
+[data-theme="white"] {
+  --vp-color-scheme: light;
+  --vp-bg: #ffffff;
+  --vp-surface: #fafafa;
+  --vp-surface-alt: #f0f0f0;
+  --vp-surface-hover: #e8e8e8;
+  --vp-surface-raised: #ffffff;
+  --vp-overlay: rgba(0, 0, 0, 0.05);
+
+  --vp-text-1: #1a1a1a;
+  --vp-text-2: #4a4a4a;
+  --vp-text-3: #808080;
+  --vp-text-4: #b3b3b3;
+
+  --vp-border: #e6e6e6;
+  --vp-border-strong: #cccccc;
+  --vp-divider: #f2f2f2;
+
+  --vp-primary-soft: #fdf5f6;
+  --vp-accent-soft: #f6f9f0;
+  --vp-warm-soft: #fff8f2;
+  --vp-luxe-soft: #fbf5f0;
+  --vp-success-soft: #f6faf0;
+  --vp-warning-soft: #fffaf0;
+  --vp-danger-soft: #fdf5f6;
+  --vp-info-soft: #f5f5f5;
+
+  --vp-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --vp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 7px 18px rgba(0, 0, 0, 0.04);
+  --vp-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.08);
+  --vp-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.12);
+}
+
 /* ----- 基础 ----- */
 html, body, #app { height: 100%; }
 body {
@@ -140,6 +173,7 @@ body {
   text-rendering: optimizeLegibility;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+  transition: background 0.25s ease, color 0.25s ease;
 }
 #app { isolation: isolate; }
 *, *::before, *::after { box-sizing: border-box; }

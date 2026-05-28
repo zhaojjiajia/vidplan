@@ -70,6 +70,9 @@
       </nav>
 
       <div class="bottom">
+        <div class="icp-info" v-if="!collapsed">
+          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">豫ICP备2026021341号</a>
+        </div>
         <div class="user-pod">
           <div class="user-info">
             <span class="vp-avatar">{{ initial }}</span>
@@ -77,11 +80,18 @@
               <div class="user-name">{{ auth.user?.nickname || auth.user?.username || '未登录' }}</div>
             </div>
           </div>
-          <el-tooltip content="退出登录" placement="top" :show-after="200">
-            <button class="logout-btn" @click="onLogout" aria-label="退出登录">
-              <el-icon><SwitchButton /></el-icon>
-            </button>
-          </el-tooltip>
+          <div class="user-actions">
+            <el-tooltip :content="currentTheme === 'default' ? '纯白主题' : '默认主题'" placement="top" :show-after="200">
+              <button class="action-btn" @click="toggleTheme" aria-label="切换主题">
+                <el-icon><component :is="currentTheme === 'default' ? Sunny : Moon" /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip content="退出登录" placement="top" :show-after="200">
+              <button class="action-btn logout-btn" @click="onLogout" aria-label="退出登录">
+                <el-icon><SwitchButton /></el-icon>
+              </button>
+            </el-tooltip>
+          </div>
         </div>
       </div>
     </aside>
@@ -114,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Avatar,
@@ -126,6 +136,8 @@ import {
   MapLocation,
   Plus,
   Setting,
+  Sunny,
+  Moon,
   SwitchButton,
 } from '@element-plus/icons-vue'
 
@@ -143,6 +155,21 @@ function toggleCollapse() {
   localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0')
 }
 
+const THEME_KEY = 'vp.theme'
+const currentTheme = ref(localStorage.getItem(THEME_KEY) || 'default')
+
+function toggleTheme() {
+  currentTheme.value = currentTheme.value === 'default' ? 'white' : 'default'
+  localStorage.setItem(THEME_KEY, currentTheme.value)
+  document.documentElement.setAttribute('data-theme', currentTheme.value)
+}
+
+onMounted(() => {
+  if (currentTheme.value === 'white') {
+    document.documentElement.setAttribute('data-theme', 'white')
+  }
+})
+
 const primaryNav = [
   { path: '/app/me/plans',  label: '我的方案', icon: Document },
   { path: '/app/me/series', label: '我的系列', icon: Files },
@@ -156,7 +183,6 @@ const assetNav = [
 
 const systemNav = [
   { path: '/app/settings/ai', label: 'AI 设置', icon: Setting },
-  { path: '/app/garden',      label: '赏花',    icon: Cherry },
 ]
 
 function isActive(path: string) {
@@ -183,7 +209,6 @@ const workspaceTitle = computed(() => {
   if (route.name === 'series-relationships') return '人物关系'
   if (route.name === 'series-edit') return '系列编辑'
   if (route.name === 'ai-settings') return 'AI 设置'
-  if (route.name === 'flower-garden') return '赏花'
   if (route.name === 'asset-characters') return '人物资产'
   if (route.name === 'asset-styles') return '风格资产'
   if (route.name === 'asset-worldviews') return '环境资产'
@@ -378,7 +403,8 @@ function onLogout() {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 130px;
 }
-.logout-btn {
+.user-actions { display: flex; align-items: center; gap: 4px; }
+.action-btn {
   width: 24px; height: 24px;
   border: none; background: transparent;
   color: var(--vp-text-3); border-radius: var(--vp-r-sm);
@@ -386,10 +412,25 @@ function onLogout() {
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
 }
-.logout-btn:hover { background: var(--vp-surface-hover); color: var(--vp-text-1); }
-.logout-btn :deep(svg) { width: 14px; height: 14px; }
+.action-btn:hover { background: var(--vp-surface-hover); color: var(--vp-text-1); }
+.action-btn :deep(svg) { width: 14px; height: 14px; }
+.icp-info {
+  text-align: center;
+  margin-bottom: 4px;
+}
+.icp-info a {
+  font-size: 11px;
+  color: var(--vp-text-4);
+  text-decoration: none;
+  transition: color .15s;
+}
+.icp-info a:hover {
+  color: var(--vp-text-3);
+}
+
 .shell.collapsed .user-meta { display: none; }
-.shell.collapsed .logout-btn { display: none; }
+.shell.collapsed .user-actions { flex-direction: column; }
+.shell.collapsed .action-btn { display: none; }
 
 /* ----- 内容区 ----- */
 .content {

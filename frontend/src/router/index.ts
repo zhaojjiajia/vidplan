@@ -26,7 +26,6 @@ const routes: RouteRecordRaw[] = [
       { path: 'series/:id/relationships', name: 'series-relationships', component: () => import('@/views/SeriesEditor.vue') },
       { path: 'series/:id', name: 'series-edit', component: () => import('@/views/SeriesEditor.vue') },
       { path: 'settings/ai', name: 'ai-settings', component: () => import('@/views/AISettings.vue') },
-      { path: 'garden', name: 'flower-garden', component: () => import('@/views/FlowerGarden.vue') },
     ],
   },
 ]
