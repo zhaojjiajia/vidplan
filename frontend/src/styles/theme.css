@@ -5,44 +5,44 @@
  * 统一维护颜色、间距、阴影和常用页面结构，避免在视图里散落硬编码样式。
  * ===================================================================== */
 
-:root, [data-theme="light"] {
+:root, [data-theme="white"] {
   --vp-color-scheme: light;
   /* ----- 品牌与语义色 ----- */
-  --vp-bg: #fff8f0;
-  --vp-surface: #fffdfa;
-  --vp-surface-alt: #fff1e8;
-  --vp-surface-hover: #ffe8df;
-  --vp-surface-raised: #fffaf5;
-  --vp-overlay: rgba(99, 44, 45, 0.055);
+  --vp-bg: #ffffff;
+  --vp-surface: #fafafa;
+  --vp-surface-alt: #f0f0f0;
+  --vp-surface-hover: #e8e8e8;
+  --vp-surface-raised: #ffffff;
+  --vp-overlay: rgba(0, 0, 0, 0.05);
 
-  --vp-text-1: #34201d;
-  --vp-text-2: #604943;
-  --vp-text-3: #96786b;
-  --vp-text-4: #c4a99a;
+  --vp-text-1: #1a1a1a;
+  --vp-text-2: #4a4a4a;
+  --vp-text-3: #808080;
+  --vp-text-4: #b3b3b3;
 
-  --vp-border: #efd8cc;
-  --vp-border-strong: #d8b7a7;
-  --vp-divider: #f3e2d8;
+  --vp-border: #e6e6e6;
+  --vp-border-strong: #cccccc;
+  --vp-divider: #f2f2f2;
 
   --vp-primary: #b54558;
   --vp-primary-hover: #c85668;
   --vp-primary-active: #8d2936;
-  --vp-primary-soft: #fde9ee;
+  --vp-primary-soft: #fdf5f6;
 
   --vp-accent: #758d29;
-  --vp-accent-soft: #eef5dc;
+  --vp-accent-soft: #f6f9f0;
   --vp-warm: #c98555;
-  --vp-warm-soft: #fff0df;
+  --vp-warm-soft: #fff8f2;
   --vp-luxe: #a47a4f;
-  --vp-luxe-soft: #f7eadc;
+  --vp-luxe-soft: #fbf5f0;
 
   --vp-success: #6f8b35;
-  --vp-success-soft: #f0f6df;
+  --vp-success-soft: #f6faf0;
   --vp-warning: #c47b35;
-  --vp-warning-soft: #fff3dc;
+  --vp-warning-soft: #fffaf0;
   --vp-danger: #b54558;
-  --vp-danger-soft: #fde9ee;
-  --vp-info-soft: #f8ece4;
+  --vp-danger-soft: #fdf5f6;
+  --vp-info-soft: #f5f5f5;
 
   /* ----- 间距 ----- */
   --vp-s-1: 4px;
@@ -64,10 +64,10 @@
   --vp-r-pill: 999px;
 
   /* ----- 阴影 ----- */
-  --vp-shadow-xs: 0 1px 2px rgba(84, 40, 36, 0.055);
-  --vp-shadow-sm: 0 1px 2px rgba(84, 40, 36, 0.06), 0 7px 18px rgba(84, 40, 36, 0.055);
-  --vp-shadow-md: 0 14px 34px rgba(84, 40, 36, 0.11);
-  --vp-shadow-lg: 0 24px 64px rgba(84, 40, 36, 0.16);
+  --vp-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --vp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 7px 18px rgba(0, 0, 0, 0.04);
+  --vp-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.08);
+  --vp-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.12);
 
   /* ----- 字体 ----- */
   --vp-font: "ZCOOL XiaoWei", "Songti SC", "STSong", "Noto Serif CJK SC",
@@ -119,37 +119,38 @@
   --el-font-size-base: 18px;
 }
 
-[data-theme="white"] {
+[data-theme="warm"],
+[data-theme="light"] {
   --vp-color-scheme: light;
-  --vp-bg: #ffffff;
-  --vp-surface: #fafafa;
-  --vp-surface-alt: #f0f0f0;
-  --vp-surface-hover: #e8e8e8;
-  --vp-surface-raised: #ffffff;
-  --vp-overlay: rgba(0, 0, 0, 0.05);
+  --vp-bg: #fff8f0;
+  --vp-surface: #fffdfa;
+  --vp-surface-alt: #fff1e8;
+  --vp-surface-hover: #ffe8df;
+  --vp-surface-raised: #fffaf5;
+  --vp-overlay: rgba(99, 44, 45, 0.055);
 
-  --vp-text-1: #1a1a1a;
-  --vp-text-2: #4a4a4a;
-  --vp-text-3: #808080;
-  --vp-text-4: #b3b3b3;
+  --vp-text-1: #34201d;
+  --vp-text-2: #604943;
+  --vp-text-3: #96786b;
+  --vp-text-4: #c4a99a;
 
-  --vp-border: #e6e6e6;
-  --vp-border-strong: #cccccc;
-  --vp-divider: #f2f2f2;
+  --vp-border: #efd8cc;
+  --vp-border-strong: #d8b7a7;
+  --vp-divider: #f3e2d8;
 
-  --vp-primary-soft: #fdf5f6;
-  --vp-accent-soft: #f6f9f0;
-  --vp-warm-soft: #fff8f2;
-  --vp-luxe-soft: #fbf5f0;
-  --vp-success-soft: #f6faf0;
-  --vp-warning-soft: #fffaf0;
-  --vp-danger-soft: #fdf5f6;
-  --vp-info-soft: #f5f5f5;
+  --vp-primary-soft: #fde9ee;
+  --vp-accent-soft: #eef5dc;
+  --vp-warm-soft: #fff0df;
+  --vp-luxe-soft: #f7eadc;
+  --vp-success-soft: #f0f6df;
+  --vp-warning-soft: #fff3dc;
+  --vp-danger-soft: #fde9ee;
+  --vp-info-soft: #f8ece4;
 
-  --vp-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --vp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 7px 18px rgba(0, 0, 0, 0.04);
-  --vp-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.08);
-  --vp-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.12);
+  --vp-shadow-xs: 0 1px 2px rgba(84, 40, 36, 0.055);
+  --vp-shadow-sm: 0 1px 2px rgba(84, 40, 36, 0.06), 0 7px 18px rgba(84, 40, 36, 0.055);
+  --vp-shadow-md: 0 14px 34px rgba(84, 40, 36, 0.11);
+  --vp-shadow-lg: 0 24px 64px rgba(84, 40, 36, 0.16);
 }
 
 /* ----- 基础 ----- */

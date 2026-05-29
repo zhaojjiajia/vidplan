@@ -3,10 +3,12 @@ from __future__ import annotations
 from django.conf import settings
 
 from .providers.base import AIProvider
+from .providers.anthropic_provider import AnthropicProvider
 from .providers.openai_provider import OpenAIProvider, QwenProvider
 
 PROVIDER_CLASSES: dict[str, type[AIProvider]] = {
     "openai": OpenAIProvider,
+    "anthropic": AnthropicProvider,
     "qwen": QwenProvider,
 }
 

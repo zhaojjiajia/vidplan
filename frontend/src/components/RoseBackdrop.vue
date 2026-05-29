@@ -1,5 +1,5 @@
 <template>
-  <div class="rose-backdrop" aria-hidden="true">
+  <div :class="['rose-backdrop', { 'is-white-theme': currentTheme === 'white' }]" aria-hidden="true">
     <span
       v-for="rose in roses"
       :key="rose.id"
@@ -95,6 +95,8 @@
 </template>
 
 <script setup lang="ts">
+import { useTheme } from '@/composables/useTheme'
+
 interface RoseSpec {
   id: number
   left: string
@@ -117,6 +119,7 @@ interface RosePalette {
   core: string
 }
 
+const { currentTheme } = useTheme()
 const ROSE_COUNT = 55 + Math.floor(Math.random() * 18)
 const PALETTES: RosePalette[] = [
   { light: '#ffe3ea', mid: '#f26c8f', shadow: '#bf3b60', core: '#8f1d3b' },
@@ -165,7 +168,8 @@ const roses = Array.from({ length: ROSE_COUNT }, (_, index) => makeRose(index))
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: #FFF8F0;
+  background: var(--vp-bg);
+  transition: background .2s ease;
 }
 
 .rose-container {
@@ -183,6 +187,14 @@ const roses = Array.from({ length: ROSE_COUNT }, (_, index) => makeRose(index))
   transform-origin: 50% 100%;
   animation: roseSway var(--duration) ease-in-out var(--delay) infinite alternate;
   filter: drop-shadow(0 8px 12px rgba(141, 41, 54, 0.08));
+}
+
+.rose-backdrop.is-white-theme .rose-container {
+  display: none;
+}
+
+.rose-backdrop.is-white-theme {
+  background: transparent;
 }
 
 .rose-stem-group,

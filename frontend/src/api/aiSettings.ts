@@ -1,9 +1,11 @@
 import { http } from './index'
 
-export type AIProvider = 'openai' | 'qwen'
+export type AIProvider = 'openai' | 'anthropic'
+export type StoredAIProvider = AIProvider | 'qwen'
+export type AIProviderIcon = 'chatgpt' | 'anthropic'
 
 export interface AISetting {
-  provider: AIProvider
+  provider: StoredAIProvider
   model: string
   base_url: string
   api_key_masked: string
@@ -48,17 +50,27 @@ export const aiSettingsApi = {
   },
 }
 
-export const PROVIDER_PRESETS: Record<AIProvider, { label: string; defaultModel: string; defaultBaseUrl: string; hint: string }> = {
+export interface AIProviderPreset {
+  label: string
+  defaultModel: string
+  defaultBaseUrl: string
+  hint: string
+  icon: AIProviderIcon
+}
+
+export const PROVIDER_PRESETS: Record<AIProvider, AIProviderPreset> = {
   openai: {
-    label: 'OpenAI',
+    label: 'ChatGPT',
     defaultModel: 'gpt-4o',
     defaultBaseUrl: '',
-    hint: '使用官方 OpenAI 接口。如使用代理可填 Base URL。',
+    hint: '使用 ChatGPT 官方接口。如使用代理可填 Base URL。',
+    icon: 'chatgpt',
   },
-  qwen: {
-    label: '通义千问 (Qwen / 阿里云百炼)',
-    defaultModel: 'qwen-plus',
-    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    hint: '通过阿里云百炼 OpenAI 兼容模式调用。常用模型: qwen-plus / qwen-max / qwen-turbo。',
+  anthropic: {
+    label: 'Anthropic',
+    defaultModel: 'claude-3-5-sonnet-latest',
+    defaultBaseUrl: '',
+    hint: '使用 Anthropic Messages API。如使用代理可填 Base URL。',
+    icon: 'anthropic',
   },
 }

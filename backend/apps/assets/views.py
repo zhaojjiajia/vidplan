@@ -205,7 +205,7 @@ class AssetAIImageGenerateView(APIView):
         provider = resolve_provider_for_user(request.user)
         if not hasattr(provider, "generate_image"):
             return Response(
-                {"detail": "当前 AI 提供商不支持图片生成,请在 AI 设置切到 OpenAI"},
+                {"detail": "当前 AI 提供商不支持图片生成,请在 AI 设置切到 ChatGPT"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

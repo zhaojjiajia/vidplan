@@ -11,13 +11,15 @@
       <div class="settings-grid">
         <aside class="provider-panel">
           <button
-            v-for="(p, key) in PROVIDER_PRESETS"
-            :key="key"
-            :class="['provider-card', { active: form.provider === key }]"
+            v-for="p in providerOptions"
+            :key="p.key"
+            :class="['provider-card', { active: form.provider === p.key }]"
             type="button"
-            @click="setProvider(key)"
+            @click="setProvider(p.key)"
           >
-            <span class="provider-mark">{{ providerInitial(p.label) }}</span>
+            <span class="provider-mark">
+              <img :src="providerIcons[p.icon]" :alt="`${p.label} 图标`" />
+            </span>
             <span>
               <strong>{{ p.label }}</strong>
               <small>{{ p.defaultModel }}</small>
@@ -27,8 +29,8 @@
 
         <div class="card-body">
           <div class="provider-copy">
-            <span class="vp-status" :data-tone="serverData.has_api_key ? 'success' : 'warning'">
-              {{ serverData.has_api_key ? '已配置密钥' : '未配置密钥' }}
+            <span class="vp-status" :data-tone="hasApiKeyForCurrentProvider ? 'success' : 'warning'">
+              {{ hasApiKeyForCurrentProvider ? '已配置密钥' : '未配置密钥' }}
             </span>
             <p class="hint">{{ currentPreset.hint }}</p>
           </div>
@@ -43,7 +45,7 @@
                 autocomplete="off"
                 size="large"
               />
-              <p v-if="serverData.has_api_key && !form.api_key" class="hint">
+              <p v-if="hasApiKeyForCurrentProvider && !form.api_key" class="hint">
                 已保存:<span class="vp-mono">{{ serverData.api_key_masked }}</span> · 留空保持不变
               </p>
             </el-form-item>
@@ -55,7 +57,7 @@
               <el-form-item label="Base URL · 可选">
                 <el-input
                   v-model="form.base_url"
-                  :placeholder="currentPreset.defaultBaseUrl || 'https://api.openai.com/v1'"
+                  :placeholder="currentPreset.defaultBaseUrl || '留空使用官方接口'"
                 />
               </el-form-item>
             </div>
@@ -92,12 +94,16 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, Connection } from '@element-plus/icons-vue'
 
+import anthropicIcon from '@/assets/icons/anthropic.svg'
+import chatgptIcon from '@/assets/icons/chatgpt.svg'
 import {
   aiSettingsApi,
   PROVIDER_PRESETS,
   type AIProvider,
+  type AIProviderPreset,
   type AISetting,
   type AISettingTestResult,
+  type StoredAIProvider,
 } from '@/api/aiSettings'
 
 const loading = ref(true)
@@ -122,27 +128,41 @@ const form = reactive({
   base_url: '',
 })
 
+const providerIcons = {
+  chatgpt: chatgptIcon,
+  anthropic: anthropicIcon,
+} as const
+
+const providerOptions = (Object.entries(PROVIDER_PRESETS) as Array<[AIProvider, AIProviderPreset]>)
+  .map(([key, preset]) => ({ key, ...preset }))
+
 const currentPreset = computed(() => PROVIDER_PRESETS[form.provider])
+const hasApiKeyForCurrentProvider = computed(() => serverData.has_api_key && serverData.provider === form.provider)
 
 const apiKeyPlaceholder = computed(() =>
-  serverData.has_api_key ? '留空保持现有 Key 不变' : '请输入 API Key,例如 sk-xxx 或 dashscope key'
+  hasApiKeyForCurrentProvider.value ? '留空保持现有 Key 不变' : '请输入 ChatGPT 或 Anthropic API Key'
 )
+
+function isSupportedProvider(provider: StoredAIProvider): provider is AIProvider {
+  return provider in PROVIDER_PRESETS
+}
 
 function applyServer(d: AISetting) {
   Object.assign(serverData, d)
-  form.provider = d.provider
-  form.model = d.model
-  form.base_url = d.base_url
+  const provider = isSupportedProvider(d.provider) ? d.provider : 'openai'
+  form.provider = provider
+  form.model = provider === d.provider ? d.model : ''
+  form.base_url = provider === d.provider ? d.base_url : ''
   form.api_key = ''
 }
 
 function setProvider(provider: AIProvider) {
+  if (form.provider !== provider) {
+    form.model = ''
+    form.base_url = ''
+  }
   form.provider = provider
   testResult.value = null
-}
-
-function providerInitial(label: string) {
-  return label.trim().slice(0, 1).toUpperCase()
 }
 
 async function load() {
@@ -259,15 +279,18 @@ onMounted(load)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--vp-text-1), var(--vp-text-2));
-  color: var(--vp-bg);
-  font-weight: 800;
-  font-size: 15px;
+  background: #fff;
+  border: 1px solid var(--vp-border);
   flex-shrink: 0;
 }
+.provider-mark img {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
 .provider-card.active .provider-mark {
-  background: linear-gradient(135deg, #e78b9a, var(--vp-primary) 58%, #8d2936);
-  color: #fff;
+  border-color: var(--vp-primary);
+  box-shadow: 0 0 0 1px var(--vp-primary) inset;
 }
 .provider-card strong {
   display: block;

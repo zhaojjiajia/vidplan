@@ -13,11 +13,13 @@ class UserAISetting(TimestampedModel):
     """Per-user AI provider configuration. Falls back to env defaults when blank."""
 
     class Provider(models.TextChoices):
-        OPENAI = "openai", "OpenAI"
+        OPENAI = "openai", "ChatGPT"
         QWEN = "qwen", "通义千问 (Qwen)"
+        ANTHROPIC = "anthropic", "Anthropic"
 
     PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
         "openai": {"base_url": "", "model": "gpt-4o"},
+        "anthropic": {"base_url": "", "model": "claude-3-5-sonnet-latest"},
         "qwen": {
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "model": "qwen-plus",

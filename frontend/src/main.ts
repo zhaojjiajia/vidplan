@@ -8,14 +8,13 @@ import './styles/asset-edit-dialog.css'
 
 import App from './App.vue'
 import router from './router'
+import { initTheme } from '@/composables/useTheme'
 
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 
-document.documentElement.dataset.theme = 'light'
-document.documentElement.classList.remove('dark')
-localStorage.removeItem('vp.theme')
+initTheme()
 
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })

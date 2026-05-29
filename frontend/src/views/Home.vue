@@ -16,6 +16,11 @@
           </template>
           <button v-else type="button" class="top-action" @click="$router.push('/app/me/plans')">进入工作台</button>
         </div>
+        <el-tooltip :content="currentTheme === 'white' ? '暖色主题' : '白色主题'" placement="bottom" :show-after="200">
+          <button type="button" class="theme-action" aria-label="切换主题" @click="toggleTheme">
+            <el-icon><component :is="currentTheme === 'white' ? Sunny : Cherry" /></el-icon>
+          </button>
+        </el-tooltip>
       </div>
     </header>
 
@@ -59,6 +64,7 @@
       </div>
       <footer class="foot">
         <span>© {{ year }} VidPlan</span>
+        <a class="icp-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">豫ICP备2026021341号</a>
         <span class="foot-meta">为短视频创作者打造</span>
       </footer>
     </section>
@@ -68,16 +74,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  Cherry,
   Connection,
   Edit,
   MagicStick,
+  Sunny,
   TrendCharts,
 } from '@element-plus/icons-vue'
 
+import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const homeRef = ref<HTMLElement | null>(null)
+const { currentTheme, toggleTheme } = useTheme()
 
 const year = computed(() => new Date().getFullYear())
 
@@ -259,7 +269,7 @@ onBeforeUnmount(() => {
 
 /* ----- Topbar ----- */
 .topbar {
-  padding: 14px 24px;
+  padding: 14px 72px 14px 24px;
   position: sticky; top: 0; z-index: 10;
   backdrop-filter: saturate(180%) blur(12px);
   background: color-mix(in srgb, var(--vp-bg) 90%, transparent);
@@ -283,6 +293,34 @@ onBeforeUnmount(() => {
 }
 .top-links a:hover { color: var(--vp-text-1); }
 .actions { display: flex; gap: 18px; align-items: center; }
+.theme-action {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--vp-r-sm);
+  background: transparent;
+  color: var(--vp-text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.theme-action:hover {
+  background: var(--vp-surface-hover);
+  color: var(--vp-text-2);
+}
+.theme-action :deep(.el-icon) {
+  font-size: 24px;
+}
+.theme-action :deep(svg) {
+  width: 1em;
+  height: 1em;
+}
 .top-action {
   border: none;
   background: transparent;
@@ -422,12 +460,20 @@ onBeforeUnmount(() => {
   padding: 22px 0 0;
   margin-top: 42px;
   display: flex; justify-content: space-between;
+  gap: 18px;
   font-size: 16px; color: var(--vp-text-3);
 }
+.icp-link {
+  color: var(--vp-text-3);
+  text-decoration: none;
+}
+.icp-link:hover { color: var(--vp-text-2); }
 
 @media (max-width: 720px) {
   .top-links { display: none; }
-  .topbar { padding: 12px 16px; }
+  .topbar { padding: 12px 58px 12px 16px; }
+  .theme-action { right: 16px; width: 32px; height: 32px; }
+  .theme-action :deep(.el-icon) { font-size: 23px; }
   .hero { min-height: calc(100vh - 61px); padding: 54px 20px; }
   .hero-title { font-size: 46px; line-height: 1.22; margin-bottom: 42px; top: -34px; }
   .hero-sub { font-size: 20px; line-height: 1.85; }

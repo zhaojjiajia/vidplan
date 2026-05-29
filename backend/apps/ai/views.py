@@ -54,10 +54,12 @@ class AISettingTestView(APIView):
 
         saved = UserAISetting.objects.filter(user=request.user).first()
         provider_name = override.get("provider") or (saved.provider if saved else "openai")
-        api_key = override.get("api_key") or (saved.api_key if saved else "")
-        model = override.get("model") or (saved.resolved_model() if saved else UserAISetting.PROVIDER_DEFAULTS[provider_name]["model"])
+        saved_matches_provider = bool(saved and saved.provider == provider_name)
+        defaults = UserAISetting.PROVIDER_DEFAULTS[provider_name]
+        api_key = override.get("api_key") or (saved.api_key if saved_matches_provider else "")
+        model = override.get("model") or (saved.resolved_model() if saved_matches_provider else defaults["model"])
         base_url = override.get("base_url") or (
-            saved.resolved_base_url() if saved else UserAISetting.PROVIDER_DEFAULTS[provider_name]["base_url"]
+            saved.resolved_base_url() if saved_matches_provider else defaults["base_url"]
         )
 
         if not api_key:

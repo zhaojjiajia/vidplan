@@ -19,9 +19,6 @@
         </div>
       </div>
     </main>
-    <footer class="icp-footer">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">豫ICP备2026021341号</a>
-    </footer>
   </div>
 </template>
 
@@ -100,20 +97,4 @@ async function onSubmit() {
   .auth-title { font-size: 28px; white-space: normal; }
 }
 
-.icp-footer {
-  text-align: center;
-  padding: 16px;
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-}
-.icp-footer a {
-  font-size: 13px;
-  color: var(--vp-text-4);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-.icp-footer a:hover {
-  color: var(--vp-text-3);
-}
 </style>

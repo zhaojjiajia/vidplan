@@ -48,8 +48,15 @@ class UserAISettingSerializer(serializers.ModelSerializer):
     def update(self, instance: UserAISetting, validated_data: dict) -> UserAISetting:
         # Empty string for api_key in PUT means "leave unchanged".
         new_key = validated_data.pop("api_key", None)
+        provider_changed = (
+            "provider" in validated_data
+            and validated_data["provider"]
+            and validated_data["provider"] != instance.provider
+        )
         if new_key:
             instance.api_key = new_key
+        elif provider_changed:
+            instance.api_key = ""
         for k, v in validated_data.items():
             setattr(instance, k, v)
         instance.save()

@@ -70,9 +70,6 @@
       </nav>
 
       <div class="bottom">
-        <div class="icp-info" v-if="!collapsed">
-          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">豫ICP备2026021341号</a>
-        </div>
         <div class="user-pod">
           <div class="user-info">
             <span class="vp-avatar">{{ initial }}</span>
@@ -81,9 +78,9 @@
             </div>
           </div>
           <div class="user-actions">
-            <el-tooltip :content="currentTheme === 'default' ? '纯白主题' : '默认主题'" placement="top" :show-after="200">
+            <el-tooltip :content="currentTheme === 'white' ? '暖色主题' : '白色主题'" placement="top" :show-after="200">
               <button class="action-btn" @click="toggleTheme" aria-label="切换主题">
-                <el-icon><component :is="currentTheme === 'default' ? Sunny : Moon" /></el-icon>
+                <el-icon><component :is="currentTheme === 'white' ? Sunny : Cherry" /></el-icon>
               </button>
             </el-tooltip>
             <el-tooltip content="退出登录" placement="top" :show-after="200">
@@ -124,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Avatar,
@@ -137,10 +134,10 @@ import {
   Plus,
   Setting,
   Sunny,
-  Moon,
   SwitchButton,
 } from '@element-plus/icons-vue'
 
+import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -149,26 +146,12 @@ const router = useRouter()
 
 const COLLAPSE_KEY = 'vp.sidebar.collapsed'
 const collapsed = ref(localStorage.getItem(COLLAPSE_KEY) === '1')
+const { currentTheme, toggleTheme } = useTheme()
 
 function toggleCollapse() {
   collapsed.value = !collapsed.value
   localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0')
 }
-
-const THEME_KEY = 'vp.theme'
-const currentTheme = ref(localStorage.getItem(THEME_KEY) || 'default')
-
-function toggleTheme() {
-  currentTheme.value = currentTheme.value === 'default' ? 'white' : 'default'
-  localStorage.setItem(THEME_KEY, currentTheme.value)
-  document.documentElement.setAttribute('data-theme', currentTheme.value)
-}
-
-onMounted(() => {
-  if (currentTheme.value === 'white') {
-    document.documentElement.setAttribute('data-theme', 'white')
-  }
-})
 
 const primaryNav = [
   { path: '/app/me/plans',  label: '我的方案', icon: Document },
@@ -414,20 +397,6 @@ function onLogout() {
 }
 .action-btn:hover { background: var(--vp-surface-hover); color: var(--vp-text-1); }
 .action-btn :deep(svg) { width: 14px; height: 14px; }
-.icp-info {
-  text-align: center;
-  margin-bottom: 4px;
-}
-.icp-info a {
-  font-size: 11px;
-  color: var(--vp-text-4);
-  text-decoration: none;
-  transition: color .15s;
-}
-.icp-info a:hover {
-  color: var(--vp-text-3);
-}
-
 .shell.collapsed .user-meta { display: none; }
 .shell.collapsed .user-actions { flex-direction: column; }
 .shell.collapsed .action-btn { display: none; }

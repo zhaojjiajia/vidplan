@@ -10,12 +10,9 @@
       // Apply theme before first paint to avoid FOUC.
       (function () {
         try {
-          var saved = localStorage.getItem('vp.theme') || 'light';
-          var resolved = saved === 'system'
-            ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            : saved;
+          var saved = localStorage.getItem('vp.theme');
+          var resolved = saved === 'warm' ? 'warm' : 'white';
           document.documentElement.setAttribute('data-theme', resolved);
-          if (resolved === 'dark') document.documentElement.classList.add('dark');
         } catch (_) {}
       })();
     </script>

@@ -49,27 +49,45 @@ class AISettingsAPITests(APITestCase):
         resp = self.client.put(
             "/api/v1/ai-settings/",
             {
-                "provider": "qwen",
-                "api_key": "dashscope-secret-1234",
-                "model": "qwen-plus",
-                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "provider": "anthropic",
+                "api_key": "anthropic-secret-1234",
+                "model": "claude-3-5-sonnet-latest",
+                "base_url": "",
             },
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data["has_api_key"])
         self.assertNotIn("api_key", resp.data)
-        self.assertEqual(resp.data["api_key_masked"], "dash******1234")
+        self.assertEqual(resp.data["api_key_masked"], "anth******1234")
 
         resp = self.client.put(
             "/api/v1/ai-settings/",
-            {"model": "qwen-max", "api_key": ""},
+            {"model": "claude-3-opus-latest", "api_key": ""},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         setting = UserAISetting.objects.get(user=self.user)
-        self.assertEqual(setting.api_key, "dashscope-secret-1234")
-        self.assertEqual(setting.model, "qwen-max")
+        self.assertEqual(setting.api_key, "anthropic-secret-1234")
+        self.assertEqual(setting.model, "claude-3-opus-latest")
+
+    def test_provider_change_without_new_key_clears_saved_key(self):
+        self.client.put(
+            "/api/v1/ai-settings/",
+            {"provider": "openai", "api_key": "sk-openai-1234"},
+            format="json",
+        )
+
+        resp = self.client.put(
+            "/api/v1/ai-settings/",
+            {"provider": "anthropic"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertFalse(resp.data["has_api_key"])
+        setting = UserAISetting.objects.get(user=self.user)
+        self.assertEqual(setting.api_key, "")
 
     def test_test_endpoint_without_api_key_returns_clear_failure(self):
         resp = self.client.post("/api/v1/ai-settings/test/", {}, format="json")
