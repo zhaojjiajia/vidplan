@@ -300,4 +300,28 @@ async function onDelete(kind: CustomAssetKind) {
   border-top: 1px solid var(--vp-divider);
 }
 .hint { font-size: 11.5px; margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .kind-grid {
+    grid-template-columns: 1fr;
+  }
+  .kind-card {
+    flex-direction: column;
+  }
+  .kind-cover {
+    width: 100%;
+    min-height: 88px;
+  }
+  .kind-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .kind-actions {
+    flex-wrap: wrap;
+  }
+  .kind-actions :deep(.el-button) {
+    margin-left: 0;
+  }
+}
 </style>

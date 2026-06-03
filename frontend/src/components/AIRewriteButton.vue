@@ -12,7 +12,7 @@
       <button
         type="button"
         class="ai-rewrite-btn"
-        :class="{ active: visible }"
+        :class="{ active: visible, 'has-label': showLabel }"
         :title="title"
         @click.stop="toggle"
       >
@@ -201,30 +201,48 @@ async function copy(value: string) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--vp-border, #e5e7eb);
-  background: var(--vp-surface, #fff);
+  padding: 0 2px;
+  border: none;
+  background: transparent;
   color: var(--vp-text-2, #6b7280);
-  font-size: 12px;
-  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 0;
   cursor: pointer;
-  transition: all .15s ease;
-  line-height: 1;
+  transition: color .15s ease;
+  line-height: 24px;
   height: 24px;
 }
 .ai-rewrite-btn:hover,
 .ai-rewrite-btn.active {
-  border-color: var(--vp-primary, #4f46e5);
   color: var(--vp-primary, #4f46e5);
-  background: var(--vp-primary-soft, rgba(79, 70, 229, .08));
+  background: transparent;
 }
-.ai-rewrite-btn :deep(.el-icon) { font-size: 13px; }
+.ai-rewrite-btn :deep(.el-icon) { font-size: 14px; }
+.ai-rewrite-btn.has-label {
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+.ai-rewrite-btn.has-label :deep(.el-icon) { font-size: 16px; }
 .ai-rewrite-label { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .ai-rewrite-btn.has-label {
+    padding: 4px 6px;
+    font-size: 13.5px;
+  }
+  .ai-rewrite-btn.has-label :deep(.el-icon) { font-size: 15px; }
+}
 </style>
 
 <style>
 /* Unscoped because el-popover content is teleported outside this component. */
-.ai-rewrite-popper { padding: 0 !important; }
+.ai-rewrite-popper {
+  padding: 0 !important;
+  max-width: calc(100vw - 24px) !important;
+}
 
 .ai-rewrite-popover {
   display: flex;
@@ -340,5 +358,31 @@ async function copy(value: string) {
   justify-content: flex-end;
   border-top: 1px solid var(--vp-border, #f3f4f6);
   padding-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .ai-rewrite-popover {
+    padding: 12px;
+    max-height: 72vh;
+  }
+  .ai-rewrite-popover .rw-head,
+  .ai-rewrite-popover .rw-candidate-head,
+  .ai-rewrite-popover .rw-actions {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .ai-rewrite-popover .rw-actions {
+    gap: 8px;
+  }
+  .ai-rewrite-popover .rw-path {
+    width: 100%;
+    word-break: break-all;
+  }
+  .ai-rewrite-popover .rw-candidate-actions {
+    flex-wrap: wrap;
+  }
+  .ai-rewrite-popover .el-button {
+    white-space: nowrap;
+  }
 }
 </style>

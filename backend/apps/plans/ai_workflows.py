@@ -272,6 +272,54 @@ def _reindex_content_section_storyboards(content: Any) -> dict:
     return {**content, "sections": normalized}
 
 
+def _target_section_index_from_hint(hint: str) -> int | None:
+    match = re.search(r"content\.sections\[(\d+)\]", hint or "")
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _storyboard_from_target_section_payload(payload: dict, target_index: int) -> list[dict] | None:
+    payload_content = payload.get("content") if isinstance(payload.get("content"), dict) else {}
+    sections = payload_content.get("sections")
+    if isinstance(sections, list) and sections:
+        candidates: list[Any] = []
+        if 0 <= target_index < len(sections):
+            candidates.append(sections[target_index])
+        if len(sections) == 1:
+            candidates.append(sections[0])
+
+        for raw in candidates:
+            if isinstance(raw, dict) and isinstance(raw.get("storyboard"), list):
+                return _safe_storyboard(raw.get("storyboard"))
+
+    if isinstance(payload.get("storyboard"), list):
+        return _safe_storyboard(payload.get("storyboard"))
+    return None
+
+
+def _apply_target_section_storyboard(plan: VideoPlan, payload: dict, target_index: int) -> bool:
+    content = plan.content if isinstance(plan.content, dict) else {}
+    sections = content.get("sections")
+    if not isinstance(sections, list) or not (0 <= target_index < len(sections)):
+        return False
+
+    shots = _storyboard_from_target_section_payload(payload, target_index)
+    if shots is None:
+        return False
+
+    merged_sections: list[dict] = []
+    for index, raw in enumerate(sections):
+        section = dict(raw) if isinstance(raw, dict) else {}
+        if index == target_index:
+            section["storyboard"] = shots
+        merged_sections.append(section)
+
+    plan.content = _reindex_content_section_storyboards({**content, "sections": merged_sections})
+    plan.storyboard = _storyboard_from_content_sections(plan.content)
+    return True
+
+
 def _resolve_direction(input_direction: str, ai_payload: dict) -> str:
     """Pick the routing key to store on the plan.
 
@@ -347,6 +395,47 @@ def _normalize_series_relationships(value: Any) -> list[dict]:
             }
         )
     return rows
+
+
+def _list_of_text(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [_text(item) for item in value if _text(item)]
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[\n;；、,，]", value) if item.strip()]
+    return []
+
+
+def _normalize_big_environment(value: Any, *, fallback_title: str, fallback_summary: str) -> dict:
+    if isinstance(value, str):
+        raw = {"description": value}
+    elif isinstance(value, dict):
+        raw = value
+    else:
+        raw = {}
+
+    name = _text(raw.get("name") or raw.get("title"))
+    description = _text(raw.get("description") or raw.get("background") or raw.get("summary"))
+    tone_color = _text(raw.get("tone_color") or raw.get("tone") or raw.get("color"))
+    images = raw.get("images") if isinstance(raw.get("images"), list) else []
+    return {
+        "name": name or "系列大环境",
+        "description": description or fallback_summary or fallback_title or "所有角色共同所处的总体环境",
+        "tone_color": tone_color,
+        "rules": _list_of_text(raw.get("rules")),
+        "locations": _list_of_text(raw.get("locations")),
+        "images": images,
+    }
+
+
+def _is_big_environment_worldview(spec: dict, big_environment: dict) -> bool:
+    name = _asset_key(_text(spec.get("name")))
+    big_name = _asset_key(_text(big_environment.get("name")))
+    if not name:
+        return False
+    generic_names = {"故事背景", "世界观", "大环境", "系列大环境", "背景环境"}
+    if _text(spec.get("name")) in generic_names:
+        return True
+    return bool(big_name and (name == big_name or name in big_name or big_name in name))
 
 
 def _attach_relationship_asset_ids(
@@ -454,7 +543,7 @@ def execute_optimize_plan_task(task: AITask) -> dict:
     if series_context:
         current["_series_context"] = series_context
     ai_payload = optimize_plan(user=task.user, plan_dict=current, scope=scope, hint=hint)
-    apply_ai_payload(plan, ai_payload)
+    apply_ai_payload(plan, ai_payload, scope=scope, hint=hint)
     if plan.status == VideoPlan.Status.OPTIMIZING:
         plan.status = VideoPlan.Status.DRAFT
     plan.save()
@@ -506,10 +595,15 @@ def execute_generate_series_task(task: AITask) -> dict:
     positioning = ai_payload.get("positioning", {})
     if not isinstance(positioning, dict):
         positioning = {}
+    big_environment = _normalize_big_environment(
+        positioning.get("big_environment") or ai_payload.get("big_environment"),
+        fallback_title=ai_payload.get("title", ""),
+        fallback_summary=ai_payload.get("summary", ""),
+    )
     relationships = _normalize_series_relationships(
         ai_payload.get("relationships") or positioning.get("relationships") or []
     )
-    positioning = {**positioning, "relationships": relationships}
+    positioning = {**positioning, "big_environment": big_environment, "relationships": relationships}
     series = SeriesPlan.objects.create(
         user=task.user,
         title=ai_payload.get("title", "未命名系列")[:200],
@@ -543,6 +637,8 @@ def execute_generate_series_task(task: AITask) -> dict:
             created_asset_ids = []
             for spec in asset_bundle.get(atype, []) or []:
                 if not isinstance(spec, dict):
+                    continue
+                if atype == "worldviews" and _is_big_environment_worldview(spec, big_environment):
                     continue
                 name = (spec.get("name") or "").strip()[:120] or "未命名"
                 payload = spec.get("payload") or {}
@@ -640,7 +736,11 @@ def execute_check_consistency_task(task: AITask) -> dict:
     )
 
 
-def apply_ai_payload(plan: VideoPlan, payload: dict) -> None:
+def apply_ai_payload(plan: VideoPlan, payload: dict, *, scope: str = "", hint: str = "") -> None:
+    target_section_index = _target_section_index_from_hint(hint) if scope == "storyboard" else None
+    if target_section_index is not None and _apply_target_section_storyboard(plan, payload, target_section_index):
+        return
+
     content_sections_updated = False
     if "title" in payload:
         plan.title = payload["title"][:200] or plan.title

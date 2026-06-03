@@ -180,6 +180,63 @@ class PlansAndAssetsAPITests(APITestCase):
         self.assertEqual(plan.content["sections"][1]["storyboard"][0]["idx"], 1)
         self.assertEqual(plan.storyboard, [{"idx": 1, "duration": 30, "description": "第二章分镜"}])
 
+    def test_apply_ai_payload_merges_single_section_storyboard_without_dropping_others(self):
+        plan = self.create_plan()
+        plan.content = {
+            "sections": [
+                {"title": "章节 1", "summary": "铺垫", "storyboard": [{"idx": 1, "duration": 3, "description": "第一章旧分镜"}]},
+                {"title": "章节 2", "summary": "推进", "storyboard": [{"idx": 2, "duration": 3, "description": "第二章旧分镜"}]},
+                {"title": "章节 3", "summary": "收束", "storyboard": [{"idx": 3, "duration": 3, "description": "第三章旧分镜"}]},
+            ]
+        }
+        plan.storyboard = [
+            {"idx": 1, "duration": 3, "description": "第一章旧分镜"},
+            {"idx": 2, "duration": 3, "description": "第二章旧分镜"},
+            {"idx": 3, "duration": 3, "description": "第三章旧分镜"},
+        ]
+
+        apply_ai_payload(
+            plan,
+            {
+                "content": {
+                    "sections": [
+                        {"storyboard": [{"idx": 99, "duration": 8, "description": "第二章新分镜"}]},
+                    ]
+                },
+                "storyboard": [{"idx": 99, "duration": 8, "description": "第二章新分镜"}],
+            },
+            scope="storyboard",
+            hint="只为 content.sections[1] 生成分镜脚本。",
+        )
+
+        self.assertEqual(len(plan.content["sections"]), 3)
+        self.assertEqual(plan.content["sections"][0]["storyboard"][0]["description"], "第一章旧分镜")
+        self.assertEqual(plan.content["sections"][1]["storyboard"][0]["description"], "第二章新分镜")
+        self.assertEqual(plan.content["sections"][2]["storyboard"][0]["description"], "第三章旧分镜")
+        self.assertEqual([shot["idx"] for shot in plan.storyboard], [1, 2, 3])
+
+    def test_apply_ai_payload_merges_top_level_section_storyboard_without_splitting_all_sections(self):
+        plan = self.create_plan()
+        plan.content = {
+            "sections": [
+                {"title": "章节 1", "summary": "铺垫", "storyboard": [{"idx": 1, "duration": 3, "description": "第一章旧分镜"}]},
+                {"title": "章节 2", "summary": "推进", "storyboard": [{"idx": 2, "duration": 3, "description": "第二章旧分镜"}]},
+            ]
+        }
+
+        apply_ai_payload(
+            plan,
+            {"storyboard": [{"idx": 9, "duration": 6, "description": "第二章新分镜"}]},
+            scope="storyboard",
+            hint="只为 content.sections[1] 生成分镜脚本。",
+        )
+
+        self.assertEqual(len(plan.content["sections"]), 2)
+        self.assertEqual(plan.content["sections"][0]["storyboard"][0]["description"], "第一章旧分镜")
+        self.assertEqual(plan.content["sections"][1]["storyboard"][0]["description"], "第二章新分镜")
+        self.assertEqual(plan.storyboard[0]["description"], "第一章旧分镜")
+        self.assertEqual(plan.storyboard[1]["description"], "第二章新分镜")
+
     @patch("apps.plans.views.build_creation_outline")
     def test_outline_returns_simple_payload_without_creating_plan(self, mock_build_creation_outline):
         mock_build_creation_outline.return_value = {

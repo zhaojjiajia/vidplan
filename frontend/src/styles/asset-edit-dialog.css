@@ -138,3 +138,41 @@
   background: transparent !important;
   box-shadow: none !important;
 }
+
+@media (max-width: 720px) {
+  .asset-edit-dialog .aed-table,
+  .asset-edit-dialog .aed-table tbody,
+  .asset-edit-dialog .aed-table tr,
+  .asset-edit-dialog .aed-table th,
+  .asset-edit-dialog .aed-table td {
+    display: block;
+    width: 100% !important;
+  }
+  .asset-edit-dialog .aed-table {
+    border-radius: 10px;
+  }
+  .asset-edit-dialog .aed-table tr {
+    border-bottom: 1px solid var(--vp-divider, #f3f4f6);
+  }
+  .asset-edit-dialog .aed-table tr:last-child {
+    border-bottom: none;
+  }
+  .asset-edit-dialog .aed-table th,
+  .asset-edit-dialog .aed-table td {
+    border-right: none;
+    border-bottom: none;
+  }
+  .asset-edit-dialog .aed-table th {
+    padding: 12px 14px 4px;
+    background: transparent;
+    font-size: 13px;
+  }
+  .asset-edit-dialog .aed-table td {
+    padding: 0 14px 12px;
+    font-size: 15px;
+  }
+  .asset-edit-dialog .aed-table .el-input__inner,
+  .asset-edit-dialog .aed-table .el-textarea__inner {
+    font-size: 15px !important;
+  }
+}

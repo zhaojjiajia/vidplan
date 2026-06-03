@@ -395,4 +395,17 @@ function formatDate(iso: string): string {
   padding-top: 6px;
   border-top: 1px solid var(--vp-divider);
 }
+
+@media (max-width: 820px) {
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search {
+    width: 100%;
+  }
+  .asset-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

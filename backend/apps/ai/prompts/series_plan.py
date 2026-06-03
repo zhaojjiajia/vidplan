@@ -28,7 +28,15 @@ text_to_video | image_to_video | virtual_ip
   "positioning": {{
     "core_concept": "系列核心概念",
     "target_user": "目标用户画像",
-    "promise": "对观众的承诺"
+    "promise": "对观众的承诺",
+    "big_environment": {{
+      "name": "大环境名称,如未来校园/海边小镇/都市职场",
+      "description": "所有角色共同所处的总体环境,必须生成",
+      "tone_color": "整体影调与色彩,用于画布背景",
+      "rules": ["这个世界或场域的固定规则"],
+      "locations": ["代表性地点"],
+      "images": []
+    }}
   }},
   "episode_template": {{
     "sections": [
@@ -52,7 +60,7 @@ text_to_video | image_to_video | virtual_ip
       {{"name":"统一风格","payload":{{"visual":"","editing":"","music":"","color":""}},"fixed_traits":[]}}
     ],
     "worldviews": [
-      {{"name":"故事背景","payload":{{"background":"","rules":[],"locations":[]}},"fixed_traits":[]}}
+      {{"name":"小环境名称","payload":{{"tone_color":"","purpose":"","fixed_details":[]}},"fixed_traits":[]}}
     ],
     "columns": [
       {{"name":"栏目结构","payload":{{"structure":[],"title_formula":"","cadence":""}},"fixed_traits":[]}}
@@ -61,5 +69,7 @@ text_to_video | image_to_video | virtual_ip
 }}
 
 人物关系只在明确存在多个人物或角色关系时输出;日常 vlog、教程、游戏流程、知识栏目等没有人物关系时输出空数组 []。
-资产建议也只输出对系列复用有帮助的内容,不要为了填满字段编造角色关系。
+大环境必须输出到 positioning.big_environment,它不是资产,不要放入 assets.worldviews。
+assets.worldviews 只用于小环境资产,例如某个角色的居住环境、工作间、常去地点等;如果系列想法或大纲内容没有明确标注这类具体小环境,worldviews 必须输出空数组 []。
+资产建议也只输出对系列复用有帮助的内容,不要为了填满字段编造角色关系或小环境资产。
 """

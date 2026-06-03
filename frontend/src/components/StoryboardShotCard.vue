@@ -178,6 +178,10 @@ function bindDescriptionRef(el: unknown) {
   flex-shrink: 0;
   min-width: 0;
 }
+.shot-card-head-right :deep(.el-button) {
+  margin-left: 0;
+  white-space: nowrap;
+}
 .shot-toggle-icon {
   font-size: 14px;
   color: var(--vp-text-3, #9ca3af);
@@ -221,5 +225,40 @@ function bindDescriptionRef(el: unknown) {
 .shot-body :deep(.el-textarea__inner::placeholder) {
   color: var(--vp-text-4, #d1d5db);
   font-size: 14.5px;
+}
+
+@media (max-width: 720px) {
+  .shot-card-head {
+    padding: 9px 10px;
+  }
+  .shot-card.is-expanded .shot-card-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .shot-card.is-expanded .shot-card-head-left {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .shot-card-head-right {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+  .shot-card.is-expanded .shot-card-head-right {
+    width: 100%;
+  }
+  .shot-card.is-expanded .shot-toggle-icon {
+    margin-left: auto;
+  }
+  .shot-body {
+    padding: 14px 12px 16px;
+  }
+  .shot-body :deep(.el-textarea__inner) {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .shot-body :deep(.el-textarea__inner::placeholder) {
+    font-size: 13.5px;
+  }
 }
 </style>

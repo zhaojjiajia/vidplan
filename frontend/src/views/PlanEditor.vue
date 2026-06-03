@@ -78,6 +78,7 @@
                 :width="320"
                 trigger="manual"
                 placement="bottom-end"
+                popper-class="regen-popper"
               >
                 <template #reference>
                   <el-button text size="small" @click="regenPopoverOpen = !regenPopoverOpen">重新生成</el-button>
@@ -157,17 +158,34 @@
                   <div v-else class="shots">
                     <ShotInsertSlot :position="1" @click="addShotAt(sectionIdx, 0)" />
                     <template v-for="(shot, shotIdx) in section.storyboard" :key="shot._uiKey">
-                      <StoryboardShotCard
-                        :plan-id="plan.id"
-                        :index="globalShotIndex(sectionIdx, shotIdx)"
-                        :shot="shot"
-                        :expanded="!!shotExpanded[shot._uiKey]"
-                        @toggle="(v: boolean) => (shotExpanded[shot._uiKey] = v)"
-                        @update="(field, value) => onShotUpdate(sectionIdx, shotIdx, field, value)"
-                        @remove="removeShot(sectionIdx, shotIdx)"
-                        @rewrite="applyRewrite"
-                        @register-rewrite-ref="bindRewriteRef"
-                      />
+                      <div
+                        :class="[
+                          'shot-drag-shell',
+                          {
+                            'is-dragging': draggingShotKey === shot._uiKey,
+                            'is-drop-before': dragOverShotKey === shot._uiKey && shotDragOverSide === 'before',
+                            'is-drop-after': dragOverShotKey === shot._uiKey && shotDragOverSide === 'after',
+                          },
+                        ]"
+                        draggable="true"
+                        @dragstart.stop="onShotDragStart($event, shot._uiKey)"
+                        @dragover.prevent.stop="onShotDragOver($event, shot._uiKey)"
+                        @dragleave.stop="onShotDragLeave($event, shot._uiKey)"
+                        @drop.prevent.stop="onShotDrop($event, shot._uiKey)"
+                        @dragend="onShotDragEnd"
+                      >
+                        <StoryboardShotCard
+                          :plan-id="plan.id"
+                          :index="globalShotIndex(sectionIdx, shotIdx)"
+                          :shot="shot"
+                          :expanded="!!shotExpanded[shot._uiKey]"
+                          @toggle="(v: boolean) => (shotExpanded[shot._uiKey] = v)"
+                          @update="(field, value) => onShotUpdate(sectionIdx, shotIdx, field, value)"
+                          @remove="removeShot(sectionIdx, shotIdx)"
+                          @rewrite="applyRewrite"
+                          @register-rewrite-ref="bindRewriteRef"
+                        />
+                      </div>
                       <ShotInsertSlot :position="shotIdx + 2" @click="addShotAt(sectionIdx, shotIdx + 1)" />
                     </template>
                   </div>
@@ -364,6 +382,9 @@ const propsDraft = reactive({
 const shotExpanded = reactive<Record<string, boolean>>({})
 const sectionStoryboardOpen = reactive<Record<string, boolean>>({})
 const sectionGeneratingKey = ref('')
+const draggingShotKey = ref('')
+const dragOverShotKey = ref('')
+const shotDragOverSide = ref<'before' | 'after'>('before')
 
 // 文档分段的折叠状态。正文只默认展开分镜，其他内容由用户按需打开。
 // structure 在新版界面不再单独展示，但继续透传旧数据，避免保存时丢失。
@@ -736,6 +757,78 @@ function onSectionSummaryInput(event: Event) {
   scheduleSave()
 }
 
+function shotLocationByKey(key: string): { sectionIdx: number; shotIdx: number; shot: ShotWithKey } | null {
+  if (!key) return null
+  for (let sectionIdx = 0; sectionIdx < form.sections.length; sectionIdx += 1) {
+    const section = form.sections[sectionIdx]
+    const shotIdx = section.storyboard.findIndex((shot) => shot._uiKey === key)
+    if (shotIdx >= 0) {
+      const shot = section.storyboard[shotIdx]
+      if (shot) return { sectionIdx, shotIdx, shot }
+    }
+  }
+  return null
+}
+
+function onShotDragStart(event: DragEvent, shotKey: string) {
+  draggingShotKey.value = shotKey
+  dragOverShotKey.value = ''
+  event.dataTransfer?.setData('text/plain', shotKey)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onShotDragOver(event: DragEvent, targetShotKey: string) {
+  const sourceKey = draggingShotKey.value
+  if (!sourceKey || sourceKey === targetShotKey) {
+    dragOverShotKey.value = ''
+    return
+  }
+  const target = event.currentTarget as HTMLElement | null
+  const rect = target?.getBoundingClientRect()
+  dragOverShotKey.value = targetShotKey
+  shotDragOverSide.value = rect && event.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+}
+
+function onShotDragLeave(event: DragEvent, shotKey: string) {
+  const current = event.currentTarget as HTMLElement | null
+  const next = event.relatedTarget
+  if (current && next instanceof Node && current.contains(next)) return
+  if (dragOverShotKey.value === shotKey) dragOverShotKey.value = ''
+}
+
+function onShotDrop(event: DragEvent, targetShotKey: string) {
+  const sourceKey = event.dataTransfer?.getData('text/plain') || draggingShotKey.value
+  moveShotByKey(sourceKey, targetShotKey, shotDragOverSide.value)
+  onShotDragEnd()
+}
+
+function onShotDragEnd() {
+  draggingShotKey.value = ''
+  dragOverShotKey.value = ''
+}
+
+function moveShotByKey(sourceKey: string, targetKey: string, side: 'before' | 'after') {
+  if (!sourceKey || !targetKey || sourceKey === targetKey) return
+  const source = shotLocationByKey(sourceKey)
+  const target = shotLocationByKey(targetKey)
+  if (!source || !target) return
+
+  const [moving] = form.sections[source.sectionIdx].storyboard.splice(source.shotIdx, 1)
+  if (!moving) return
+
+  const updatedTarget = shotLocationByKey(targetKey)
+  if (!updatedTarget) {
+    form.sections[source.sectionIdx].storyboard.splice(source.shotIdx, 0, moving)
+    return
+  }
+
+  const insertIdx = updatedTarget.shotIdx + (side === 'after' ? 1 : 0)
+  form.sections[updatedTarget.sectionIdx].storyboard.splice(insertIdx, 0, moving)
+  form.storyboard = flattenSections()
+  scheduleSave()
+}
+
 /**
  * 在任意位置插入空分镜。新分镜默认展开，方便用户立即编辑。
  */
@@ -833,7 +926,7 @@ function buildSectionStoryboardHint(sectionIdx: number) {
     `全片章节结构:\n${allSections}`,
     '要求:结合本章内容和系列上下文生成当前章节的完整分镜脚本。每个分镜可以是一段可执行镜头组,不要按 3 秒短镜头硬拆。',
     '每个镜头 description 用三行:画面、台词/旁白、剪辑/运镜/字幕。',
-    '不要改动其他章节的标题、摘要和 storyboard。返回 content.sections,并同步返回顶层 storyboard 扁平数组。',
+    '不要改动其他章节的标题、摘要和 storyboard。只返回当前章节的新 storyboard;推荐 JSON 为 {"content":{"sections":[{"storyboard":[...]}]}}。',
   ].join('\n')
 }
 
@@ -1317,6 +1410,35 @@ function isAbortError(err: unknown) {
   overflow: hidden;
   padding: 0 1px;
 }
+.shot-drag-shell {
+  position: relative;
+  cursor: grab;
+  transition: opacity .12s ease, transform .12s ease;
+}
+.shot-drag-shell.is-dragging {
+  opacity: .52;
+  cursor: grabbing;
+  transform: scale(.995);
+}
+.shot-drag-shell.is-drop-before::before,
+.shot-drag-shell.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 3px;
+  z-index: 3;
+  border-radius: 999px;
+  background: var(--vp-primary, #4f46e5);
+  box-shadow: 0 0 0 4px var(--vp-primary-soft, rgba(79, 70, 229, .12));
+  pointer-events: none;
+}
+.shot-drag-shell.is-drop-before::before {
+  top: -8px;
+}
+.shot-drag-shell.is-drop-after::after {
+  bottom: -8px;
+}
 .plan-sections {
   display: grid;
   gap: 18px;
@@ -1427,15 +1549,67 @@ function isAbortError(err: unknown) {
 .muted { color: var(--vp-text-3); font-size: 12.5px; }
 
 @media (max-width: 720px) {
-  .doc-wrap { padding: 20px 14px 80px; }
-  .doc-toolbar { padding: 8px 14px; flex-wrap: wrap; }
-  .dt-right { flex-wrap: wrap; }
+  .doc-wrap { padding: 18px 12px 76px; }
+  .doc-toolbar {
+    align-items: flex-start;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .dt-left,
+  .dt-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .dt-right {
+    justify-content: flex-start;
+  }
+  .dt-divider {
+    display: none;
+  }
+  .task-alert {
+    margin: 10px 12px 0;
+  }
+  .doc-head {
+    margin-bottom: 20px;
+  }
+  .doc-title {
+    font-size: 24px;
+    line-height: 1.25;
+  }
+  .doc-summary-input {
+    min-height: 48px;
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
   .plan-section-head {
     flex-direction: column;
+    gap: 8px;
   }
   .plan-section-tools {
     max-width: none;
     justify-content: flex-start;
+  }
+  .section-title-input {
+    font-size: 16.5px;
+  }
+  .section-summary-input {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .section-shot-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .section-shot-heading :deep(.el-button) {
+    margin-left: 0;
+    white-space: nowrap;
+  }
+  .section-empty {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
   }
 }
 </style>
@@ -1492,5 +1666,18 @@ function isAbortError(err: unknown) {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+.editor-page .el-button {
+  word-break: keep-all;
+}
+
+@media (max-width: 720px) {
+  .regen-popper {
+    max-width: calc(100vw - 24px) !important;
+  }
+  .editor-page .el-button {
+    white-space: nowrap;
+  }
 }
 </style>

@@ -51,13 +51,22 @@
             </button>
             <button
               type="button"
-              :class="['canvas-tool', { active: relationLabelsVisible }]"
-              :title="relationLabelsVisible ? '隐藏关系文字' : '显示关系文字'"
-              :aria-label="relationLabelsVisible ? '隐藏关系文字' : '显示关系文字'"
-              :aria-pressed="relationLabelsVisible"
-              @click="relationLabelsVisible = !relationLabelsVisible"
+              :class="['canvas-tool', { active: canvasImageOnlyMode }]"
+              :title="canvasImageOnlyMode ? '显示资产卡片和关系连线' : '只显示资产图片'"
+              :aria-label="canvasImageOnlyMode ? '显示资产卡片和关系连线' : '只显示资产图片'"
+              :aria-pressed="canvasImageOnlyMode"
+              @click="toggleCanvasImageOnlyMode"
             >
-              <el-icon><component :is="relationLabelsVisible ? View : Hide" /></el-icon>
+              <el-icon><component :is="canvasImageOnlyMode ? Hide : View" /></el-icon>
+            </button>
+            <button
+              type="button"
+              class="canvas-tool"
+              title="编辑人物关系"
+              aria-label="编辑人物关系"
+              @click="openRelationshipDialog"
+            >
+              <el-icon><User /></el-icon>
             </button>
             <el-dropdown trigger="click" placement="bottom-end" @command="openCanvasAsset">
               <button
@@ -86,14 +95,11 @@
             }"
           >
             <div
-              class="pinboard-canvas"
-              :style="{
-                width: `${pinboardSize.width}px`,
-                height: `${pinboardSize.height}px`,
-                transform: `scale(${boardScale})`,
-              }"
+              :class="['pinboard-canvas', { 'is-image-only': canvasImageOnlyMode }]"
+              :style="pinboardCanvasStyle"
             >
               <svg
+                v-if="!canvasImageOnlyMode"
                 class="pin-lines"
                 :width="pinboardSize.width"
                 :height="pinboardSize.height"
@@ -120,7 +126,6 @@
 	                  />
                   <text
                     v-if="
-                      relationLabelsVisible &&
                       line.relation.label &&
                       !isEnvironmentRelation(line) &&
                       activeRelationId !== line.relation.id
@@ -144,7 +149,7 @@
 
 		              <button
 		                v-for="line in actionableRelationLines"
-		                v-show="boardTool === 'select'"
+		                v-show="boardTool === 'select' && !canvasImageOnlyMode"
 		                :key="`relation-hotspot-${line.id}`"
 		                type="button"
 	                :class="['pin-relation-hotspot', { 'is-editing': activeRelationId === line.relation.id }]"
@@ -155,7 +160,7 @@
 	              />
 
 	              <div
-	                v-if="activeRelationLine"
+	                v-if="activeRelationLine && !canvasImageOnlyMode"
 	                class="pin-relation-editor"
 	                :style="relationEditorStyle(activeRelationLine)"
 	                @click.stop
@@ -181,7 +186,17 @@
 		                </button>
 		              </div>
 
-	              <article
+              <button
+                type="button"
+                class="big-environment-title"
+                title="编辑大环境"
+                @click.stop="openBigEnvironmentDialog"
+                @pointerdown.stop
+              >
+                {{ bigEnvironment.name || '系列大环境' }}
+              </button>
+
+		              <article
                 v-for="node in pinNodes"
                 :key="node.id"
                 :class="[
@@ -216,7 +231,7 @@
                   />
                 </div>
                 <div v-else-if="node.kind === 'asset'" class="pin-images pin-images--empty">
-                  <el-icon><Picture /></el-icon>
+                  <el-icon><component :is="nodePlaceholderIcon(node)" /></el-icon>
                 </div>
 
                 <h3>{{ node.title }}</h3>
@@ -233,7 +248,6 @@
 	                <div class="pin-connect-handles">
 	                  <button
 	                    v-for="side in connectSides"
-	                    v-show="boardTool === 'select'"
 	                    :key="side"
 	                    type="button"
 	                    :class="['pin-connect-handle', `pin-connect-handle--${side}`]"
@@ -241,6 +255,7 @@
 	                    title="新建连线"
 	                    aria-label="新建连线"
 	                    tabindex="-1"
+	                    v-show="boardTool === 'select' && !canvasImageOnlyMode"
 	                    @click.stop.prevent
 	                    @pointerdown.stop="startRelationDrag($event, node, side)"
 	                  />
@@ -445,6 +460,7 @@
       width="780px"
       :close-on-click-modal="false"
       class="pin-edit-dialog"
+      @close="autoSaveSeries"
     >
       <div v-if="activePanel === 'series'" class="pin-edit-body pin-edit-body--plain">
         <table class="aed-table">
@@ -752,6 +768,133 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="relationshipDialogOpen"
+      title="人物关系"
+      width="760px"
+      :close-on-click-modal="false"
+      class="relationship-edit-dialog"
+    >
+      <div class="relationship-dialog-body">
+        <div v-if="selectedAssetsMap.characters.length < 2" class="empty-state">
+          <p>至少关联两个角色后,才能编辑人物关系。</p>
+        </div>
+        <template v-else>
+          <div
+            v-for="(row, idx) in relationshipDraftRows"
+            :key="`relationship-draft-${idx}`"
+            class="relationship-edit-row"
+          >
+            <el-select v-model="row.from_asset_id" filterable placeholder="人物 A">
+              <el-option
+                v-for="item in selectedAssetsMap.characters"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+              />
+            </el-select>
+            <el-select v-model="row.to_asset_id" filterable placeholder="人物 B">
+              <el-option
+                v-for="item in relationshipTargetOptions(row)"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+              />
+            </el-select>
+            <el-input v-model="row.label" placeholder="关系,如朋友 / 师徒" />
+            <el-button
+              text
+              type="danger"
+              :icon="Delete"
+              title="删除关系"
+              @click="removeRelationshipDraft(idx)"
+            />
+          </div>
+          <el-button
+            text
+            size="small"
+            :icon="Plus"
+            :disabled="selectedAssetsMap.characters.length < 2"
+            @click="addRelationshipDraft"
+          >
+            添加关系
+          </el-button>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="relationshipDialogOpen = false">取消</el-button>
+        <el-button type="primary" @click="applyRelationshipDialog">应用到画布</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="bigEnvironmentDialogOpen"
+      title="大环境"
+      width="720px"
+      :close-on-click-modal="false"
+      class="asset-edit-dialog"
+      @close="autoSaveSeries"
+    >
+      <el-form label-position="top">
+        <el-form-item class="aed-gallery-item">
+          <AssetImageGallery
+            v-model="bigEnvironment.images"
+            :labels="bigEnvironmentImageLabels"
+            :ai-prompt-provider="buildBigEnvironmentPrompt"
+          />
+        </el-form-item>
+        <table class="aed-table">
+          <tbody>
+            <tr>
+              <th>名称</th>
+              <td><el-input v-model="bigEnvironment.name" placeholder="例如: 海边小镇 / 未来校园" /></td>
+            </tr>
+            <tr>
+              <th>描述</th>
+              <td>
+                <el-input
+                  v-model="bigEnvironment.description"
+                  type="textarea"
+                  :autosize="{ minRows: 2 }"
+                  placeholder="所有角色共同所处的总体环境"
+                />
+              </td>
+            </tr>
+            <tr>
+              <th>影调与色彩</th>
+              <td><el-input v-model="bigEnvironment.tone_color" placeholder="例如: 低饱和暖光、浅雾感" /></td>
+            </tr>
+            <tr>
+              <th>固定规则</th>
+              <td>
+                <el-input
+                  v-model="bigEnvironmentRulesText"
+                  type="textarea"
+                  :autosize="{ minRows: 1 }"
+                  placeholder="每行一条"
+                />
+              </td>
+            </tr>
+            <tr>
+              <th>代表地点</th>
+              <td>
+                <el-input
+                  v-model="bigEnvironmentLocationsText"
+                  type="textarea"
+                  :autosize="{ minRows: 1 }"
+                  placeholder="每行一条"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </el-form>
+      <template #footer>
+        <el-button @click="bigEnvironmentDialogOpen = false">关闭</el-button>
+        <el-button type="primary" @click="bigEnvironmentDialogOpen = false">完成</el-button>
+      </template>
+    </el-dialog>
+
     <!-- AI 生成单集弹窗保留给内部生成流程。 -->
     <el-dialog v-model="episodeDialogOpen" title="AI 生成单集" width="560px" :close-on-click-modal="false">
       <el-form :model="episodeForm" label-position="top">
@@ -850,10 +993,26 @@
         </table>
       </el-form>
       <template #footer>
-        <el-button @click="assetDialogOpen = false" :disabled="assetSaving">取消</el-button>
-        <el-button type="primary" :loading="assetSaving" @click="saveQuickAsset">
-          {{ assetEditingId ? '保存' : '保存并关联' }}
-        </el-button>
+        <div class="asset-dialog-footer">
+          <el-button
+            v-if="assetEditingId"
+            type="danger"
+            text
+            :icon="Delete"
+            :loading="assetDeleting"
+            :disabled="assetSaving"
+            @click="deleteActiveAsset"
+          >
+            删除
+          </el-button>
+          <span v-else />
+          <div class="asset-dialog-actions">
+            <el-button @click="assetDialogOpen = false" :disabled="assetSaving || assetDeleting">取消</el-button>
+            <el-button type="primary" :loading="assetSaving" :disabled="assetDeleting" @click="saveQuickAsset">
+              {{ assetEditingId ? '保存' : '保存并关联' }}
+            </el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -872,6 +1031,7 @@ import {
   DocumentChecked,
   EditPen,
   Hide,
+  House,
   MagicStick,
   MapLocation,
   Mouse,
@@ -883,6 +1043,7 @@ import {
   Search,
   Setting,
   User,
+  UserFilled,
   View,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1022,6 +1183,21 @@ interface SeriesRelationship {
   to_asset_name?: string
 }
 
+interface RelationshipEditDraft {
+  from_asset_id: string
+  to_asset_id: string
+  label: string
+}
+
+interface BigEnvironment {
+  name: string
+  description: string
+  tone_color: string
+  rules: string[]
+  locations: string[]
+  images: AssetImage[]
+}
+
 interface PinNode {
   id: string
   kind: PinKind
@@ -1062,10 +1238,11 @@ interface RelationDrag {
 const connectSides: ConnectSide[] = ['top', 'right', 'bottom', 'left']
 const boardRef = ref<HTMLElement | null>(null)
 const boardLayout = reactive<Record<string, { x: number; y: number }>>({})
+const imageOnlyBoardLayout = reactive<Record<string, { x: number; y: number }>>({})
 const boardScale = ref(0.92)
 const boardTool = ref<BoardTool>('select')
 const draggingNodeId = ref('')
-const relationLabelsVisible = ref(true)
+const canvasImageOnlyMode = ref(false)
 const activeRelationId = ref('')
 const relationDraft = ref('')
 const relationInputRef = ref<HTMLInputElement | null>(null)
@@ -1074,16 +1251,48 @@ const relationDrag = ref<RelationDrag | null>(null)
 const suppressPinClick = ref(false)
 const panelDialogOpen = ref(false)
 const activePanel = ref<PinPanel>('series')
+const relationshipDialogOpen = ref(false)
+const bigEnvironmentDialogOpen = ref(false)
 const relationEdges = ref<PinRelation[]>([])
 const aiRelationshipRows = ref<SeriesRelationship[]>([])
+const relationshipDraftRows = ref<RelationshipEditDraft[]>([])
+const bigEnvironment = reactive<BigEnvironment>({
+  name: '',
+  description: '',
+  tone_color: '',
+  rules: [],
+  locations: [],
+  images: [],
+})
+const bigEnvironmentImageLabels = ['背景', '色彩', '地标', '氛围', '其他']
 
 const pinLayoutKey = computed(() => `vp.series.relationship-canvas.${route.params.id || 'new'}`)
+const imageOnlyPinLayoutKey = computed(() => `vp.series.image-canvas.${route.params.id || 'new'}`)
 const relationStorageKey = computed(() => `vp.series.relationships.${route.params.id || 'new'}`)
 
 function assetNodeFrame(index: number) {
   const characterCount = selectedAssetsMap.value.characters.length
   const isEnvironment = index >= characterCount
   const localIndex = isEnvironment ? index - characterCount : index
+  if (canvasImageOnlyMode.value) {
+    const col = localIndex % 3
+    const row = Math.floor(localIndex / 3)
+    const groupX = 86 + col * 390
+    const groupY = 106 + row * 270
+    return isEnvironment
+      ? {
+          x: groupX + 136,
+          y: groupY + 26,
+          w: 244,
+          h: 178,
+        }
+      : {
+          x: groupX,
+          y: groupY + 74,
+          w: 128,
+          h: 148,
+        }
+  }
   const col = localIndex % 3
   const row = Math.floor(localIndex / 3)
   return {
@@ -1096,6 +1305,14 @@ function assetNodeFrame(index: number) {
 
 const pinboardSize = computed(() => {
   const assetCount = Math.max(totalSelectedAssets.value, 1)
+  if (canvasImageOnlyMode.value) {
+    const pairs = Math.max(selectedAssetsMap.value.characters.length, selectedAssetsMap.value.worldviews.length, 1)
+    const rows = Math.ceil(pairs / 3)
+    return {
+      width: Math.max(1420, 170 + Math.min(pairs, 3) * 390),
+      height: Math.max(760, 180 + rows * 270),
+    }
+  }
   const rows = Math.max(
     Math.ceil(selectedAssetsMap.value.characters.length / 3),
     Math.ceil(selectedAssetsMap.value.worldviews.length / 3),
@@ -1105,6 +1322,23 @@ const pinboardSize = computed(() => {
     width: Math.max(1420, 860 + Math.min(Math.max(assetCount, 1), 3) * 250),
     height: Math.max(760, 180 + rows * 180),
   }
+})
+
+const bigEnvironmentCover = computed(() => bigEnvironment.images.find((image) => image.url || image.thumb_url))
+const pinboardCanvasStyle = computed(() => {
+  const style: Record<string, string> = {
+    width: `${pinboardSize.value.width}px`,
+    height: `${pinboardSize.value.height}px`,
+    transform: `scale(${boardScale.value})`,
+  }
+  const imageUrl = bigEnvironmentCover.value?.url || bigEnvironmentCover.value?.thumb_url || ''
+  if (imageUrl) {
+    const safeUrl = imageUrl.replace(/"/g, '%22')
+    style.backgroundImage = `linear-gradient(rgba(255,255,255,.78), rgba(255,255,255,.84)), url("${safeUrl}")`
+    style.backgroundSize = 'cover'
+    style.backgroundPosition = 'center'
+  }
+  return style
 })
 
 const pinNodes = computed<PinNode[]>(() => {
@@ -1156,21 +1390,32 @@ const actionableRelationLines = computed(() =>
 )
 const relationshipDisplayRows = computed<SeriesRelationship[]>(() => {
   const rows: SeriesRelationship[] = []
-  const seen = new Set<string>()
+  const seenRelations = new Set<string>()
+  const seenEndpoints = new Set<string>()
+  const deleted = new Set(relationEdges.value.filter((relation) => relation.deleted).map((relation) => relation.id))
 
   for (const line of pinLines.value) {
     if (isEnvironmentRelation(line)) continue
     const label = line.relation.label.trim()
     if (!label) continue
     const row = relationshipFromLine(line)
-    const key = relationshipDisplayKey(row)
-    seen.add(key)
+    seenRelations.add(line.relation.id)
+    const endpointKey = relationshipEndpointKey(row)
+    if (endpointKey) seenEndpoints.add(endpointKey)
     rows.push(row)
   }
 
   for (const row of aiRelationshipRows.value) {
-    const key = relationshipDisplayKey(row)
-    if (!seen.has(key) && relationshipDisplayText(row)) rows.push(row)
+    const relationKey = relationshipRelationId(row)
+    if (relationKey && deleted.has(relationKey)) continue
+    const endpointKey = relationshipEndpointKey(row)
+    if (relationKey && seenRelations.has(relationKey)) continue
+    if (endpointKey && seenEndpoints.has(endpointKey)) continue
+    if (relationshipDisplayText(row)) {
+      if (relationKey) seenRelations.add(relationKey)
+      if (endpointKey) seenEndpoints.add(endpointKey)
+      rows.push(row)
+    }
   }
 
   return rows
@@ -1228,6 +1473,7 @@ const taskProgress = ref(0)
 let taskAbortController: AbortController | null = null
 const assetDialogOpen = ref(false)
 const assetSaving = ref(false)
+const assetDeleting = ref(false)
 const assetEditingId = ref<string | null>(null)
 const activeAssetType = ref<AssetType>('characters')
 const activeAssetSchema = computed(() => ASSET_SCHEMAS[activeAssetType.value])
@@ -1260,6 +1506,20 @@ const assetFixedTraitsText = computed({
   get: () => assetFixedTraitsList.value.join('\n'),
   set: (v) => {
     assetFixedTraitsList.value = v.split('\n').map((s) => s.trim()).filter(Boolean)
+  },
+})
+
+const bigEnvironmentRulesText = computed({
+  get: () => bigEnvironment.rules.join('\n'),
+  set: (v) => {
+    bigEnvironment.rules = v.split('\n').map((s) => s.trim()).filter(Boolean)
+  },
+})
+
+const bigEnvironmentLocationsText = computed({
+  get: () => bigEnvironment.locations.join('\n'),
+  set: (v) => {
+    bigEnvironment.locations = v.split('\n').map((s) => s.trim()).filter(Boolean)
   },
 })
 
@@ -1300,6 +1560,7 @@ onMounted(async () => {
       syncStyleDrafts()
     }
     loadPinLayout()
+    loadImageOnlyPinLayout()
     loadRelations()
   } finally {
     loading.value = false
@@ -1340,6 +1601,7 @@ function hydrateFromServer(data: import('@/types/api').SeriesPlan) {
   positioning.core_concept = p.core_concept || ''
   positioning.target_user = p.target_user || ''
   positioning.promise = p.promise || ''
+  hydrateBigEnvironment((data.positioning as Record<string, unknown> | null | undefined)?.big_environment)
   aiRelationshipRows.value = normalizeRelationshipRows(
     (data.positioning as Record<string, unknown> | null | undefined)?.relationships,
   )
@@ -1389,6 +1651,51 @@ function pickStr(v: unknown): string {
   return String(v)
 }
 
+function listFromUnknown(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  if (typeof value === 'string') return value.split(/\n|[;；、,，]/).map((item) => item.trim()).filter(Boolean)
+  return []
+}
+
+function hydrateBigEnvironment(value: unknown) {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  bigEnvironment.name = pickStr(raw.name || raw.title) || '系列大环境'
+  bigEnvironment.description = pickStr(raw.description || raw.background || raw.summary)
+  bigEnvironment.tone_color = pickStr(raw.tone_color || raw.tone || raw.color)
+  bigEnvironment.rules = listFromUnknown(raw.rules)
+  bigEnvironment.locations = listFromUnknown(raw.locations)
+  bigEnvironment.images = Array.isArray(raw.images) ? raw.images as AssetImage[] : []
+}
+
+function buildBigEnvironmentPayload(): BigEnvironment {
+  return {
+    name: bigEnvironment.name.trim() || '系列大环境',
+    description: bigEnvironment.description.trim(),
+    tone_color: bigEnvironment.tone_color.trim(),
+    rules: [...bigEnvironment.rules],
+    locations: [...bigEnvironment.locations],
+    images: [...bigEnvironment.images],
+  }
+}
+
+function openBigEnvironmentDialog() {
+  if (!bigEnvironment.name.trim()) bigEnvironment.name = '系列大环境'
+  bigEnvironmentDialogOpen.value = true
+}
+
+function buildBigEnvironmentPrompt(): string {
+  const lines: string[] = []
+  const name = bigEnvironment.name.trim() || form.title.trim() || '系列大环境'
+  lines.push(`场景:${name}`)
+  if (bigEnvironment.description.trim()) lines.push(`总体环境:${bigEnvironment.description.trim()}`)
+  else if (form.summary.trim()) lines.push(`系列简介:${form.summary.trim()}`)
+  if (bigEnvironment.tone_color.trim()) lines.push(`影调与色彩:${bigEnvironment.tone_color.trim()}`)
+  if (bigEnvironment.rules.length) lines.push(`环境规则:${bigEnvironment.rules.join(' / ')}`)
+  if (bigEnvironment.locations.length) lines.push(`代表地点:${bigEnvironment.locations.join(' / ')}`)
+  lines.push('生成一张适合作为视频系列关系画布背景的横版环境图,浅色、低饱和、干净、有空间纵深,不要文字,不要人物特写,主体不要过暗。')
+  return lines.join('\n')
+}
+
 function addSection() {
   episodeTemplate.sections.push({ name: '', duration: '', goal: '' })
 }
@@ -1427,6 +1734,22 @@ async function save() {
   }
 }
 
+async function autoSaveSeries() {
+  if (isNew.value || !route.params.id || !form.title.trim()) return
+  const payload = buildPayload()
+  if (!payload) return
+
+  saving.value = true
+  try {
+    await seriesApi.patch(route.params.id as string, payload)
+  } catch (err: any) {
+    const detail = err?.response?.data?.detail || err?.message || '自动保存失败'
+    ElMessage.error(String(detail))
+  } finally {
+    saving.value = false
+  }
+}
+
 function buildPayload(): SeriesPayload | null {
   // Merge the structured drafts back over whatever was already in form.*_style
   // so unknown keys (e.g. fields the AI added that aren't in our schema) are
@@ -1454,7 +1777,11 @@ function buildPayload(): SeriesPayload | null {
 
   return {
     ...form,
-    positioning: { ...positioning, relationships: [...aiRelationshipRows.value] },
+    positioning: {
+      ...positioning,
+      big_environment: buildBigEnvironmentPayload(),
+      relationships: dedupeRelationshipRows(relationshipDisplayRows.value),
+    },
     episode_template: {
       sections: episodeTemplate.sections
         .filter((s) => s.name.trim() || s.goal.trim() || s.duration.trim())
@@ -1487,7 +1814,11 @@ function openAssetEditor(node: PinNode) {
   if (!node.assetType || !node.targetId) return
   const item = assets[node.assetType].find((asset) => asset.id === node.targetId)
   if (!item) return
-  activeAssetType.value = node.assetType
+  openAssetEditorForItem(node.assetType, item)
+}
+
+function openAssetEditorForItem(type: AssetType, item: AssetBase) {
+  activeAssetType.value = type
   assetEditingId.value = item.id
   assetForm.name = item.name || ''
   assetFixedTraitsList.value = Array.isArray(item.fixed_traits)
@@ -1564,10 +1895,58 @@ async function saveQuickAsset() {
     if (!form[type].includes(saved.id)) {
       form[type] = [...form[type], saved.id]
     }
+    await autoSaveSeries()
     assetDialogOpen.value = false
     ElMessage.success(assetEditingId.value ? '已保存资产' : '已创建并关联资产')
   } finally {
     assetSaving.value = false
+  }
+}
+
+async function deleteActiveAsset() {
+  const id = assetEditingId.value
+  if (!id || assetSaving.value || assetDeleting.value) return
+  const type = activeAssetType.value
+  const assetName = assetForm.name.trim() || assets[type].find((item) => item.id === id)?.name || '未命名资产'
+  try {
+    await ElMessageBox.confirm(
+      `确认删除「${assetName}」? 删除后会从当前系列和画布中移除。`,
+      '删除资产',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  assetDeleting.value = true
+  try {
+    await assetsApi.remove(type, id)
+    assets[type] = assets[type].filter((item) => item.id !== id)
+    form[type] = form[type].filter((itemId) => itemId !== id)
+
+    const nodeId = `asset-${type}-${id}`
+    delete boardLayout[nodeId]
+    delete imageOnlyBoardLayout[nodeId]
+    persistPinLayout()
+    persistImageOnlyPinLayout()
+    relationEdges.value = relationEdges.value.filter((relation) =>
+      relation.fromId !== nodeId && relation.toId !== nodeId,
+    )
+    if (type === 'characters') {
+      aiRelationshipRows.value = aiRelationshipRows.value.filter((row) => !relationshipHasAssetId(row, id))
+      relationshipDraftRows.value = relationshipDraftRows.value.filter((row) =>
+        row.from_asset_id !== id && row.to_asset_id !== id,
+      )
+    }
+    persistRelations()
+    closeRelationEditor()
+    await autoSaveSeries()
+
+    assetDialogOpen.value = false
+    assetEditingId.value = null
+    ElMessage.success('已删除资产')
+  } finally {
+    assetDeleting.value = false
   }
 }
 
@@ -1660,6 +2039,12 @@ function nodeIcon(node: PinNode) {
   return Setting
 }
 
+function nodePlaceholderIcon(node: PinNode) {
+  if (node.assetType === 'characters') return UserFilled
+  if (node.assetType === 'worldviews') return House
+  return Picture
+}
+
 function nodeActionLabel(node: PinNode): string {
   return node.assetType === 'characters' ? '查看人物' : '查看环境'
 }
@@ -1679,15 +2064,17 @@ function openPinNode(node: PinNode) {
 }
 
 function nodePosition(node: PinNode): { x: number; y: number } {
-  return boardLayout[node.id] || { x: node.x, y: node.y }
+  const layout = canvasImageOnlyMode.value ? imageOnlyBoardLayout : boardLayout
+  return layout[node.id] || { x: node.x, y: node.y }
 }
 
 function nodeStyle(node: PinNode) {
   const pos = nodePosition(node)
-  const tilt = draggingNodeId.value === node.id ? 0 : nodeTilt(node)
+  const tilt = canvasImageOnlyMode.value || draggingNodeId.value === node.id ? 0 : nodeTilt(node)
   return {
     width: `${node.w}px`,
     minHeight: `${node.h}px`,
+    height: canvasImageOnlyMode.value ? `${node.h}px` : undefined,
     transform: `translate(${pos.x}px, ${pos.y}px) rotate(${tilt}deg)`,
   }
 }
@@ -1742,11 +2129,10 @@ function isEditableRelation(line: PinLine): boolean {
 }
 
 function openRelationEditor(line: PinLine) {
-  if (boardTool.value !== 'select') return
+  if (boardTool.value !== 'select' || canvasImageOnlyMode.value) return
   activeRelationId.value = line.relation.id
   relationDraft.value = line.relation.label || ''
   if (isEditableRelation(line)) {
-    relationLabelsVisible.value = true
     void nextTick(() => relationInputRef.value?.select())
   }
 }
@@ -1821,7 +2207,7 @@ function canvasPointFromClient(clientX: number, clientY: number): Point {
 }
 
 function startRelationDrag(event: PointerEvent, node: PinNode, side: ConnectSide) {
-  if (boardTool.value !== 'select' || event.button !== 0) return
+  if (boardTool.value !== 'select' || canvasImageOnlyMode.value || event.button !== 0) return
   event.preventDefault()
   closeRelationEditor()
   const start = nodeHandlePosition(node, side)
@@ -1870,6 +2256,7 @@ function stopRelationDrag(event?: PointerEvent) {
 
 let dragState: {
   id: string
+  imageOnly: boolean
   startX: number
   startY: number
   originX: number
@@ -1879,7 +2266,8 @@ let dragState: {
 } | null = null
 
 function maybeStartNodeDrag(event: PointerEvent, node: PinNode) {
-  if (boardTool.value !== 'move' || event.button !== 0) return
+  if (event.button !== 0) return
+  if (!canvasImageOnlyMode.value && boardTool.value !== 'move') return
   event.preventDefault()
   startNodeDrag(event, node)
 }
@@ -1888,6 +2276,7 @@ function startNodeDrag(event: PointerEvent, node: PinNode) {
   const pos = nodePosition(node)
   dragState = {
     id: node.id,
+    imageOnly: canvasImageOnlyMode.value,
     startX: event.clientX,
     startY: event.clientY,
     originX: pos.x,
@@ -1909,14 +2298,18 @@ function onNodeDrag(event: PointerEvent) {
   const maxY = Math.max(16, pinboardSize.value.height - dragState.h - 24)
   const dx = (event.clientX - dragState.startX) / boardScale.value
   const dy = (event.clientY - dragState.startY) / boardScale.value
-  boardLayout[dragState.id] = {
+  const layout = dragState.imageOnly ? imageOnlyBoardLayout : boardLayout
+  layout[dragState.id] = {
     x: clamp(dragState.originX + dx, 16, maxX),
     y: clamp(dragState.originY + dy, 16, maxY),
   }
 }
 
 function stopNodeDrag() {
-  if (dragState) persistPinLayout()
+  if (dragState) {
+    if (dragState.imageOnly) persistImageOnlyPinLayout()
+    else persistPinLayout()
+  }
   dragState = null
   draggingNodeId.value = ''
   window.removeEventListener('pointermove', onNodeDrag)
@@ -1931,19 +2324,27 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function loadPinLayout() {
-  for (const key of Object.keys(boardLayout)) delete boardLayout[key]
+  loadLayoutFromStorage(boardLayout, pinLayoutKey.value)
+}
+
+function loadImageOnlyPinLayout() {
+  loadLayoutFromStorage(imageOnlyBoardLayout, imageOnlyPinLayoutKey.value)
+}
+
+function loadLayoutFromStorage(target: Record<string, { x: number; y: number }>, key: string) {
+  for (const layoutKey of Object.keys(target)) delete target[layoutKey]
   if (typeof window === 'undefined') return
-  const raw = window.localStorage.getItem(pinLayoutKey.value)
+  const raw = window.localStorage.getItem(key)
   if (!raw) return
   try {
     const parsed = JSON.parse(raw) as Record<string, { x: number; y: number }>
-    for (const [key, value] of Object.entries(parsed)) {
+    for (const [layoutKey, value] of Object.entries(parsed)) {
       if (typeof value?.x === 'number' && typeof value?.y === 'number') {
-        boardLayout[key] = value
+        target[layoutKey] = value
       }
     }
   } catch {
-    window.localStorage.removeItem(pinLayoutKey.value)
+    window.localStorage.removeItem(key)
   }
 }
 
@@ -1980,9 +2381,16 @@ function persistPinLayout() {
   window.localStorage.setItem(pinLayoutKey.value, JSON.stringify(boardLayout))
 }
 
+function persistImageOnlyPinLayout() {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(imageOnlyPinLayoutKey.value, JSON.stringify(imageOnlyBoardLayout))
+}
+
 function resetPinLayout() {
-  for (const key of Object.keys(boardLayout)) delete boardLayout[key]
-  if (typeof window !== 'undefined') window.localStorage.removeItem(pinLayoutKey.value)
+  const layout = canvasImageOnlyMode.value ? imageOnlyBoardLayout : boardLayout
+  const key = canvasImageOnlyMode.value ? imageOnlyPinLayoutKey.value : pinLayoutKey.value
+  for (const layoutKey of Object.keys(layout)) delete layout[layoutKey]
+  if (typeof window !== 'undefined') window.localStorage.removeItem(key)
   ElMessage.success('已按当前模式自动排布')
 }
 
@@ -1990,6 +2398,15 @@ function setBoardTool(tool: BoardTool) {
   boardTool.value = tool
   closeRelationEditor()
   stopRelationDrag()
+}
+
+function toggleCanvasImageOnlyMode() {
+  canvasImageOnlyMode.value = !canvasImageOnlyMode.value
+  closeRelationEditor()
+  stopRelationDrag()
+  if (canvasImageOnlyMode.value) {
+    boardTool.value = 'select'
+  }
 }
 
 function relationId(a: string, b: string): string {
@@ -2033,10 +2450,49 @@ function normalizeRelationshipRows(value: unknown): SeriesRelationship[] {
   }).filter((row) => relationshipDisplayText(row))
 }
 
+function findCharacterAssetByName(name: string): AssetBase | undefined {
+  const key = nameKey(name)
+  if (!key) return undefined
+  return assets.characters.find((item) => nameKey(item.name) === key)
+}
+
+function relationshipAssetId(row: SeriesRelationship, side: 'from' | 'to'): string {
+  const explicit = side === 'from' ? row.from_asset_id : row.to_asset_id
+  if (explicit) return explicit
+  const name = side === 'from'
+    ? row.from || row.from_asset_name || ''
+    : row.to || row.to_asset_name || ''
+  return findCharacterAssetByName(name)?.id || ''
+}
+
+function relationshipRelationId(row: SeriesRelationship): string {
+  const fromId = relationshipAssetId(row, 'from')
+  const toId = relationshipAssetId(row, 'to')
+  if (!fromId || !toId) return ''
+  const fromNode = pinNodes.value.find((node) => node.targetId === fromId || node.id.endsWith(`-${fromId}`))
+  const toNode = pinNodes.value.find((node) => node.targetId === toId || node.id.endsWith(`-${toId}`))
+  if (!fromNode || !toNode) return ''
+  return relationId(fromNode.id, toNode.id)
+}
+
+function dedupeRelationshipRows(rows: SeriesRelationship[]): SeriesRelationship[] {
+  const seen = new Set<string>()
+  const out: SeriesRelationship[] = []
+  for (const row of rows) {
+    if (!relationshipDisplayText(row)) continue
+    const key = relationshipEndpointKey(row) || relationshipDisplayKey(row)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  return out
+}
+
 function relationshipDisplayKey(row: SeriesRelationship): string {
   const left = row.from_asset_id || row.from || row.from_asset_name || ''
   const right = row.to_asset_id || row.to || row.to_asset_name || ''
-  return [nameKey(left), nameKey(right), nameKey(row.label || row.description)].join('__')
+  const endpoints = [nameKey(left), nameKey(right)].sort()
+  return [endpoints[0], endpoints[1], nameKey(row.label || row.description)].join('__')
 }
 
 function relationshipDisplayText(row: SeriesRelationship): string {
@@ -2059,6 +2515,169 @@ function relationshipFromLine(line: PinLine): SeriesRelationship {
     from_asset_name: line.from.title,
     to_asset_name: line.to.title,
   }
+}
+
+function relationshipEndpointKey(row: SeriesRelationship): string {
+  const fromId = relationshipAssetId(row, 'from')
+  const toId = relationshipAssetId(row, 'to')
+  const from = fromId || row.from_asset_name || row.from || ''
+  const to = toId || row.to_asset_name || row.to || ''
+  if (!from || !to) return ''
+  return [nameKey(from), nameKey(to)].sort().join('__')
+}
+
+function assetPairKey(a: string, b: string): string {
+  return [a, b].sort().join('__')
+}
+
+function selectedCharacterById(id: string): AssetBase | undefined {
+  return selectedAssetsMap.value.characters.find((item) => item.id === id)
+}
+
+function relationshipEditDraftFromRow(row: SeriesRelationship): RelationshipEditDraft | null {
+  const fromId = relationshipAssetId(row, 'from')
+  const toId = relationshipAssetId(row, 'to')
+  if (!fromId || !toId || fromId === toId) return null
+  if (!selectedCharacterById(fromId) || !selectedCharacterById(toId)) return null
+  return {
+    from_asset_id: fromId,
+    to_asset_id: toId,
+    label: row.label || row.description || '',
+  }
+}
+
+function usedRelationshipPairs(current?: RelationshipEditDraft): Set<string> {
+  const used = new Set<string>()
+  for (const draft of relationshipDraftRows.value) {
+    if (draft === current) continue
+    if (!draft.from_asset_id || !draft.to_asset_id || draft.from_asset_id === draft.to_asset_id) continue
+    used.add(assetPairKey(draft.from_asset_id, draft.to_asset_id))
+  }
+  return used
+}
+
+function firstAvailableRelationshipDraft(): RelationshipEditDraft | null {
+  const characters = selectedAssetsMap.value.characters
+  const used = usedRelationshipPairs()
+  for (let i = 0; i < characters.length; i += 1) {
+    for (let j = i + 1; j < characters.length; j += 1) {
+      const from = characters[i]
+      const to = characters[j]
+      if (!from || !to) continue
+      if (!used.has(assetPairKey(from.id, to.id))) {
+        return {
+          from_asset_id: from.id,
+          to_asset_id: to.id,
+          label: '',
+        }
+      }
+    }
+  }
+  return null
+}
+
+function openRelationshipDialog() {
+  const rows = relationshipDisplayRows.value
+    .map((row) => relationshipEditDraftFromRow(row))
+    .filter((row): row is RelationshipEditDraft => !!row)
+  const seen = new Set<string>()
+  relationshipDraftRows.value = rows.filter((row) => {
+    const key = assetPairKey(row.from_asset_id, row.to_asset_id)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  if (!relationshipDraftRows.value.length) {
+    const first = firstAvailableRelationshipDraft()
+    if (first) relationshipDraftRows.value = [first]
+  }
+  relationshipDialogOpen.value = true
+}
+
+function relationshipTargetOptions(row: RelationshipEditDraft): AssetBase[] {
+  const used = usedRelationshipPairs(row)
+  return selectedAssetsMap.value.characters.filter((item) => {
+    if (item.id === row.from_asset_id) return false
+    if (!row.from_asset_id) return true
+    const key = assetPairKey(row.from_asset_id, item.id)
+    return item.id === row.to_asset_id || !used.has(key)
+  })
+}
+
+function addRelationshipDraft() {
+  const draft = firstAvailableRelationshipDraft()
+  if (!draft) {
+    ElMessage.info('可用的人物组合都已添加')
+    return
+  }
+  relationshipDraftRows.value.push(draft)
+}
+
+function removeRelationshipDraft(index: number) {
+  relationshipDraftRows.value.splice(index, 1)
+}
+
+function relationshipRowsFromDialogDrafts(): SeriesRelationship[] {
+  const rows: SeriesRelationship[] = []
+  const seen = new Set<string>()
+  for (const draft of relationshipDraftRows.value) {
+    const from = selectedCharacterById(draft.from_asset_id)
+    const to = selectedCharacterById(draft.to_asset_id)
+    if (!from || !to || from.id === to.id) continue
+    const label = draft.label.trim()
+    if (!label) continue
+    const key = assetPairKey(from.id, to.id)
+    if (seen.has(key)) continue
+    seen.add(key)
+    rows.push({
+      from: from.name,
+      to: to.name,
+      label,
+      description: '',
+      from_asset_id: from.id,
+      to_asset_id: to.id,
+      from_asset_name: from.name,
+      to_asset_name: to.name,
+    })
+  }
+  return rows
+}
+
+function relationshipHasAssetId(row: SeriesRelationship, assetId: string): boolean {
+  return row.from_asset_id === assetId ||
+    row.to_asset_id === assetId ||
+    relationshipAssetId(row, 'from') === assetId ||
+    relationshipAssetId(row, 'to') === assetId
+}
+
+async function applyRelationshipDialog() {
+  const rows = relationshipRowsFromDialogDrafts()
+  aiRelationshipRows.value = rows
+
+  const characterNodeIds = new Set(pinNodes.value.filter((node) => node.assetType === 'characters').map((node) => node.id))
+  relationEdges.value = relationEdges.value.map((relation) =>
+    characterNodeIds.has(relation.fromId) && characterNodeIds.has(relation.toId)
+      ? { ...relation, label: '', deleted: true }
+      : relation,
+  )
+
+  for (const row of rows) {
+    const from = findRelationshipNode(row, 'from')
+    const to = findRelationshipNode(row, 'to')
+    if (!from || !to || from.assetType !== 'characters' || to.assetType !== 'characters' || !canConnectNodes(from, to)) continue
+    const next = upsertRelation(from, to)
+    relationEdges.value = relationEdges.value.map((relation) =>
+      relation.id === next.id
+        ? { ...relation, label: row.label || '', deleted: false }
+        : relation,
+    )
+  }
+
+  persistRelations()
+  closeRelationEditor()
+  await autoSaveSeries()
+  relationshipDialogOpen.value = false
+  ElMessage.success('人物关系已更新')
 }
 
 function findRelationshipNode(row: SeriesRelationship, side: 'from' | 'to'): PinNode | undefined {
@@ -3105,6 +3724,42 @@ function isAbortError(err: unknown) {
   color: var(--vp-text-3);
   font-size: 12px;
 }
+.relationship-dialog-body {
+  display: grid;
+  gap: 10px;
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.relationship-edit-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(160px, 1.2fr) 34px;
+  gap: 8px;
+  align-items: center;
+}
+.relationship-edit-row :deep(.el-select),
+.relationship-edit-row :deep(.el-input) {
+  min-width: 0;
+}
+.relationship-edit-row :deep(.el-select__wrapper),
+.relationship-edit-row :deep(.el-input__wrapper) {
+  box-shadow: none !important;
+  background: transparent;
+  padding: 0;
+}
+.relationship-edit-row :deep(.el-select__wrapper.is-focused),
+.relationship-edit-row :deep(.el-input__wrapper.is-focus) {
+  box-shadow: none !important;
+}
+.relationship-edit-row :deep(.el-input__inner),
+.relationship-edit-row :deep(.el-select__selected-item),
+.relationship-edit-row :deep(.el-select__placeholder) {
+  color: var(--vp-text-1);
+  font: inherit;
+}
+.relationship-edit-row :deep(.el-button) {
+  margin-left: 0;
+}
 .studio-command {
   display: flex;
   justify-content: space-between;
@@ -3460,6 +4115,34 @@ function isAbortError(err: unknown) {
 .pin-relation-delete :deep(.el-icon) {
   font-size: 15px;
 }
+.big-environment-title {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  z-index: 2;
+  max-width: min(560px, calc(100% - 44px));
+  border: none;
+  background: transparent;
+  color: var(--vp-text-1);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 760;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, .86),
+    1px 0 0 rgba(255, 255, 255, .72),
+    0 -1px 0 rgba(255, 255, 255, .72),
+    -1px 0 0 rgba(255, 255, 255, .72);
+}
+.big-environment-title:hover {
+  color: var(--vp-primary);
+}
 .pin-card {
   position: absolute;
   z-index: 1;
@@ -3707,6 +4390,90 @@ function isAbortError(err: unknown) {
   align-items: center;
   color: var(--vp-text-3);
   font-size: 12px;
+}
+.pinboard-canvas.is-image-only .pin-card {
+  padding: 0;
+  border: none;
+  border-left: none;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+  overflow: visible;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+}
+.pinboard-canvas.is-image-only .pin-card:hover {
+  border: none;
+  box-shadow: none;
+  filter: none;
+}
+.pinboard-canvas.is-image-only .pin-card.is-dragging {
+  cursor: grabbing;
+}
+.pinboard-canvas.is-image-only .pin-card-head,
+.pinboard-canvas.is-image-only .pin-card p,
+.pinboard-canvas.is-image-only .pin-tags,
+.pinboard-canvas.is-image-only .pin-card-foot,
+.pinboard-canvas.is-image-only .pin-connect-handles {
+  display: none;
+}
+.pinboard-canvas.is-image-only .pin-images {
+  width: 100%;
+  height: calc(100% - 30px);
+  gap: 0;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.pinboard-canvas.is-image-only .pin-images img {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  border: none;
+  object-fit: cover;
+  background: transparent;
+  box-shadow: none;
+}
+.pinboard-canvas.is-image-only .pin-card--characters .pin-images img {
+  object-position: center top;
+}
+.pinboard-canvas.is-image-only .pin-card--worldviews .pin-images,
+.pinboard-canvas.is-image-only .pin-card--worldviews .pin-images img {
+  border-radius: 20px;
+}
+.pinboard-canvas.is-image-only .pin-images--empty {
+  align-items: center;
+  justify-content: center;
+  border: none;
+  color: color-mix(in srgb, var(--vp-primary) 54%, var(--vp-text-3));
+  background: transparent;
+  box-shadow: none;
+}
+.pinboard-canvas.is-image-only .pin-images--empty :deep(.el-icon) {
+  font-size: 56px;
+}
+.pinboard-canvas.is-image-only .pin-card--worldviews .pin-images--empty :deep(.el-icon) {
+  font-size: 82px;
+}
+.pinboard-canvas.is-image-only .pin-card h3 {
+  width: 100%;
+  color: var(--vp-text-1);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 680;
+  text-align: center;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, .86),
+    1px 0 0 rgba(255, 255, 255, .72),
+    0 -1px 0 rgba(255, 255, 255, .72),
+    -1px 0 0 rgba(255, 255, 255, .72);
+}
+.pinboard-canvas.is-image-only .pin-card--worldviews h3 {
+  font-size: 15px;
 }
 .pin-edit-body {
   max-height: min(68vh, 720px);
@@ -4046,6 +4813,21 @@ function isAbortError(err: unknown) {
 .asset-mini:hover .asset-mini-remove { opacity: 1; }
 .asset-mini-remove :deep(.el-icon) { font-size: 12px; }
 .asset-multi { display: block; }
+.asset-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.asset-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.asset-dialog-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
 
 /* ========== Beat Board ========== */
 .beat-strip {
@@ -4212,7 +4994,87 @@ function isAbortError(err: unknown) {
 }
 
 @media (max-width: 720px) {
-  .studio-wrap { padding: 18px 14px 72px; }
+  .editor-page {
+    height: auto;
+    min-height: calc(100dvh - var(--vp-topbar-h));
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .studio-wrap {
+    min-height: calc(100dvh - var(--vp-topbar-h) - 45px);
+    padding: 14px 12px 72px;
+    overflow: visible;
+  }
+  .relationship-wrap {
+    gap: 8px;
+  }
+  .series-ai-wrap {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - var(--vp-topbar-h) - 45px);
+    padding: 14px 12px 72px;
+    overflow: visible;
+  }
+  .series-brief {
+    padding: 0 2px 6px;
+  }
+  .series-brief-title {
+    font-size: 19px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .series-brief p {
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .episode-rail-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .episode-rail-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .episode-rail-title strong {
+    font-size: 19px;
+  }
+  .episode-relation-tool {
+    margin-left: 0;
+  }
+  .series-console-actions {
+    flex-wrap: wrap;
+  }
+  .timeline-episode {
+    width: min(210px, calc(100vw - 88px));
+  }
+  .timeline-empty {
+    width: min(240px, calc(100vw - 88px));
+  }
+  .series-chat {
+    flex: 1;
+  }
+  .series-chat-bubble {
+    font-size: 14.5px;
+    line-height: 1.58;
+    padding: 10px 12px;
+  }
+  .series-composer {
+    border-radius: 18px;
+    padding: 12px;
+  }
+  .series-composer textarea {
+    height: 78px;
+    font-size: 15px;
+  }
+  .series-composer-bar span {
+    white-space: normal;
+  }
   .studio-command,
   .pinboard-head {
     flex-direction: column;
@@ -4220,11 +5082,131 @@ function isAbortError(err: unknown) {
   }
   .studio-title { font-size: 28px; }
   .studio-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pinboard-head-actions { flex-wrap: wrap; }
-  .pinboard-viewport { height: 640px; }
-  .doc-wrap { padding: 20px 14px 80px; }
-  .doc-toolbar { padding: 8px 14px; flex-wrap: wrap; }
-  .dt-right { flex-wrap: wrap; }
+  .studio-command-actions,
+  .pinboard-head-actions {
+    flex-wrap: wrap;
+  }
+  .studio-command-actions :deep(.el-button),
+  .pinboard-head-actions :deep(.el-button) {
+    margin-left: 0;
+  }
+  .pinboard-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pin-legend,
+  .pin-tool-actions {
+    flex-wrap: wrap;
+  }
+  .pinboard-viewport {
+    min-height: 360px;
+    height: min(62dvh, 520px);
+  }
+  .canvas-floating-tools {
+    top: 8px;
+    right: 8px;
+    flex-wrap: wrap;
+    max-width: calc(100% - 16px);
+  }
+  .relationship-edit-row {
+    grid-template-columns: 1fr;
+  }
+  .relationship-dialog-body {
+    max-height: none;
+  }
+  .big-environment-title {
+    left: 14px;
+    max-width: calc(100% - 28px);
+    font-size: 18px;
+  }
+  .pin-card h3 {
+    font-size: 16px;
+  }
+  .doc-wrap { padding: 18px 12px 80px; }
+  .doc-toolbar {
+    align-items: flex-start;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+  .dt-left,
+  .dt-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .dt-divider {
+    display: none;
+  }
+  .doc-form-head,
+  .doc-title-row,
+  .asset-group-head,
+  .asset-dialog-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .doc-form-head :deep(.el-button),
+  .asset-group-head :deep(.el-button),
+  .asset-dialog-actions :deep(.el-button) {
+    margin-left: 0;
+  }
+  .doc-title {
+    font-size: 24px;
+    line-height: 1.25;
+  }
   .beat-card { flex-basis: 180px; }
+  .plan-picker-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .report-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pin-edit-body {
+    max-height: none;
+    overflow: visible;
+  }
+  .aed-table,
+  .aed-table thead,
+  .aed-table tbody,
+  .aed-table tr,
+  .aed-table th,
+  .aed-table td {
+    display: block;
+    width: 100% !important;
+  }
+  .aed-table thead {
+    display: none;
+  }
+  .aed-table tr {
+    border-bottom: 1px solid var(--vp-divider);
+  }
+  .aed-table tr:last-child {
+    border-bottom: none;
+  }
+  .aed-table th,
+  .aed-table td {
+    border-right: none;
+    border-bottom: none;
+  }
+  .aed-table tbody th {
+    padding: 12px 14px 4px;
+    background: transparent;
+    font-size: 13px;
+  }
+  .aed-table tbody td {
+    padding: 0 14px 12px;
+    font-size: 15px;
+  }
+  .aed-th-action {
+    text-align: left;
+  }
+  .row-order-actions {
+    justify-content: flex-start;
+  }
+  .asset-dialog-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
 }
 </style>

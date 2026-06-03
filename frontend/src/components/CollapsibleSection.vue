@@ -5,7 +5,7 @@
         <h3 class="csec-title">{{ title }}</h3>
         <p v-if="subtitle" class="csec-subtitle">{{ subtitle }}</p>
       </div>
-      <div class="csec-head-actions" @click.stop>
+      <div class="csec-head-actions" :class="{ 'has-extra-actions': hasExtraActions }" @click.stop>
         <slot name="actions" />
         <el-icon class="csec-toggle" :class="{ open }"><ArrowDown /></el-icon>
       </div>
@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, useSlots } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -33,6 +34,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:open', open: boolean): void
 }>()
+
+const slots = useSlots()
+const hasExtraActions = computed(() => !!slots.actions)
 
 function toggle() {
   emit('update:open', !props.open)
@@ -72,16 +76,25 @@ function toggle() {
   font-size: 15px;
   font-weight: 700;
   color: var(--vp-text-1, #1f2937);
+  line-height: 1.35;
 }
 .csec-subtitle {
   margin: 3px 0 0;
   font-size: 12.5px;
+  line-height: 1.45;
   color: var(--vp-text-3, #9ca3af);
+  word-break: normal;
+  overflow-wrap: normal;
 }
 .csec-head-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+.csec-head-actions :deep(.el-button) {
+  margin-left: 0;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 .csec-toggle {
@@ -95,5 +108,41 @@ function toggle() {
 }
 .csec-body {
   padding: 18px 22px 22px;
+}
+
+@media (max-width: 720px) {
+  .csec {
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+  .csec-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .csec-head-text {
+    flex: 1 1 auto;
+    width: auto;
+  }
+  .csec-title {
+    font-size: 14.5px;
+  }
+  .csec-subtitle {
+    font-size: 12px;
+    max-width: 100%;
+  }
+  .csec-head-actions.has-extra-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+  }
+  .csec-head-actions.has-extra-actions .csec-toggle {
+    margin-left: auto;
+  }
+  .csec-body {
+    padding: 14px;
+  }
 }
 </style>
