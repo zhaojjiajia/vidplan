@@ -1237,6 +1237,7 @@ interface RelationDrag {
 
 const connectSides: ConnectSide[] = ['top', 'right', 'bottom', 'left']
 const boardRef = ref<HTMLElement | null>(null)
+const pinboardViewportSize = reactive({ width: 0, height: 0 })
 const boardLayout = reactive<Record<string, { x: number; y: number }>>({})
 const imageOnlyBoardLayout = reactive<Record<string, { x: number; y: number }>>({})
 const boardScale = ref(0.92)
@@ -1269,6 +1270,8 @@ const bigEnvironmentImageLabels = ['背景', '色彩', '地标', '氛围', '其�
 const pinLayoutKey = computed(() => `vp.series.relationship-canvas.${route.params.id || 'new'}`)
 const imageOnlyPinLayoutKey = computed(() => `vp.series.image-canvas.${route.params.id || 'new'}`)
 const relationStorageKey = computed(() => `vp.series.relationships.${route.params.id || 'new'}`)
+
+let pinboardResizeObserver: ResizeObserver | null = null
 
 function assetNodeFrame(index: number) {
   const characterCount = selectedAssetsMap.value.characters.length
@@ -1303,7 +1306,7 @@ function assetNodeFrame(index: number) {
   }
 }
 
-const pinboardSize = computed(() => {
+const basePinboardSize = computed(() => {
   const assetCount = Math.max(totalSelectedAssets.value, 1)
   if (canvasImageOnlyMode.value) {
     const pairs = Math.max(selectedAssetsMap.value.characters.length, selectedAssetsMap.value.worldviews.length, 1)
@@ -1322,6 +1325,21 @@ const pinboardSize = computed(() => {
     width: Math.max(1420, 860 + Math.min(Math.max(assetCount, 1), 3) * 250),
     height: Math.max(760, 180 + rows * 180),
   }
+})
+
+const pinboardSize = computed(() => {
+  const base = basePinboardSize.value
+  const layout = canvasImageOnlyMode.value ? imageOnlyBoardLayout : boardLayout
+  let width = Math.max(base.width, Math.ceil(pinboardViewportSize.width / boardScale.value) + 48)
+  let height = Math.max(base.height, Math.ceil(pinboardViewportSize.height / boardScale.value) + 48)
+
+  for (const node of pinNodes.value) {
+    const pos = layout[node.id] || { x: node.x, y: node.y }
+    width = Math.max(width, Math.ceil(pos.x + node.w + 220))
+    height = Math.max(height, Math.ceil(pos.y + node.h + 180))
+  }
+
+  return { width, height }
 })
 
 const bigEnvironmentCover = computed(() => bigEnvironment.images.find((image) => image.url || image.thumb_url))
@@ -1562,6 +1580,8 @@ onMounted(async () => {
     loadPinLayout()
     loadImageOnlyPinLayout()
     loadRelations()
+    await nextTick()
+    setupPinboardViewportObserver()
   } finally {
     loading.value = false
   }
@@ -2259,8 +2279,8 @@ let dragState: {
   imageOnly: boolean
   startX: number
   startY: number
-  originX: number
-  originY: number
+  offsetX: number
+  offsetY: number
   w: number
   h: number
 } | null = null
@@ -2274,13 +2294,14 @@ function maybeStartNodeDrag(event: PointerEvent, node: PinNode) {
 
 function startNodeDrag(event: PointerEvent, node: PinNode) {
   const pos = nodePosition(node)
+  const point = canvasPointFromClient(event.clientX, event.clientY)
   dragState = {
     id: node.id,
     imageOnly: canvasImageOnlyMode.value,
     startX: event.clientX,
     startY: event.clientY,
-    originX: pos.x,
-    originY: pos.y,
+    offsetX: point.x - pos.x,
+    offsetY: point.y - pos.y,
     w: node.w,
     h: node.h,
   }
@@ -2291,17 +2312,18 @@ function startNodeDrag(event: PointerEvent, node: PinNode) {
 
 function onNodeDrag(event: PointerEvent) {
   if (!dragState) return
+  event.preventDefault()
   if (Math.abs(event.clientX - dragState.startX) > 3 || Math.abs(event.clientY - dragState.startY) > 3) {
     suppressPinClick.value = true
   }
+  autoScrollPinboardDuringDrag(event)
+  const point = canvasPointFromClient(event.clientX, event.clientY)
   const maxX = Math.max(16, pinboardSize.value.width - dragState.w - 24)
   const maxY = Math.max(16, pinboardSize.value.height - dragState.h - 24)
-  const dx = (event.clientX - dragState.startX) / boardScale.value
-  const dy = (event.clientY - dragState.startY) / boardScale.value
   const layout = dragState.imageOnly ? imageOnlyBoardLayout : boardLayout
   layout[dragState.id] = {
-    x: clamp(dragState.originX + dx, 16, maxX),
-    y: clamp(dragState.originY + dy, 16, maxY),
+    x: clamp(point.x - dragState.offsetX, 16, maxX),
+    y: clamp(point.y - dragState.offsetY, 16, maxY),
   }
 }
 
@@ -2321,6 +2343,47 @@ function stopNodeDrag() {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+function autoScrollPinboardDuringDrag(event: PointerEvent) {
+  const board = boardRef.value
+  if (!board) return
+  const rect = board.getBoundingClientRect()
+  const edge = 56
+  const maxStep = 18
+  let dx = 0
+  let dy = 0
+
+  if (event.clientX < rect.left + edge) {
+    dx = -Math.ceil(((rect.left + edge - event.clientX) / edge) * maxStep)
+  } else if (event.clientX > rect.right - edge) {
+    dx = Math.ceil(((event.clientX - (rect.right - edge)) / edge) * maxStep)
+  }
+
+  if (event.clientY < rect.top + edge) {
+    dy = -Math.ceil(((rect.top + edge - event.clientY) / edge) * maxStep)
+  } else if (event.clientY > rect.bottom - edge) {
+    dy = Math.ceil(((event.clientY - (rect.bottom - edge)) / edge) * maxStep)
+  }
+
+  if (dx) board.scrollLeft += dx
+  if (dy) board.scrollTop += dy
+}
+
+function updatePinboardViewportSize() {
+  const board = boardRef.value
+  if (!board) return
+  pinboardViewportSize.width = board.clientWidth
+  pinboardViewportSize.height = board.clientHeight
+}
+
+function setupPinboardViewportObserver() {
+  updatePinboardViewportSize()
+  const board = boardRef.value
+  if (!board || typeof ResizeObserver === 'undefined') return
+  pinboardResizeObserver?.disconnect()
+  pinboardResizeObserver = new ResizeObserver(updatePinboardViewportSize)
+  pinboardResizeObserver.observe(board)
 }
 
 function loadPinLayout() {
@@ -3260,6 +3323,8 @@ function clearTaskUi() {
 
 onBeforeUnmount(() => {
   taskAbortController?.abort()
+  pinboardResizeObserver?.disconnect()
+  pinboardResizeObserver = null
   stopNodeDrag()
   stopRelationDrag()
 })
