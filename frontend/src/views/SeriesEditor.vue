@@ -914,6 +914,43 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="assetSuggestionDialogOpen"
+      title="发现新资产"
+      width="640px"
+      :close-on-click-modal="!assetSuggestionSaving"
+    >
+      <div class="asset-suggestion-dialog">
+        <p class="asset-suggestion-copy">
+          AI 在本集里发现了新的角色或小环境，确认后会加入当前系列资产。
+        </p>
+        <div v-for="group in assetSuggestionGroups" :key="group.type" class="asset-suggestion-group">
+          <div class="asset-suggestion-group-title">
+            <el-icon><component :is="group.icon" /></el-icon>
+            <span>{{ group.label }}</span>
+          </div>
+          <label v-for="item in group.items" :key="item.key" class="asset-suggestion-item">
+            <el-checkbox v-model="assetSuggestionSelection[item.key]" :disabled="assetSuggestionSaving" />
+            <div>
+              <strong>{{ item.name }}</strong>
+              <p>{{ assetSuggestionSummary(item) }}</p>
+            </div>
+          </label>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="dismissAssetSuggestions" :disabled="assetSuggestionSaving">跳过</el-button>
+        <el-button
+          type="primary"
+          :loading="assetSuggestionSaving"
+          :disabled="!selectedAssetSuggestions.length"
+          @click="confirmAssetSuggestions"
+        >
+          加入系列资产
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 一致性检查 modal -->
     <el-dialog v-model="reportDialogOpen" title="一致性检查报告" width="640px">
       <div v-if="report" class="report">
@@ -1059,7 +1096,9 @@ import type {
   AITask,
   AssetBase,
   AssetImage,
+  AssetSuggestion,
   AssetType,
+  EpisodeAssetSuggestions,
   EpisodeSummary,
   VideoPlan,
 } from '@/types/api'
@@ -1196,6 +1235,13 @@ interface BigEnvironment {
   rules: string[]
   locations: string[]
   images: AssetImage[]
+}
+
+type EpisodeSuggestionAssetType = 'characters' | 'worldviews'
+
+interface PendingAssetSuggestion extends AssetSuggestion {
+  key: string
+  asset_type: EpisodeSuggestionAssetType
 }
 
 interface PinNode {
@@ -1482,6 +1528,27 @@ const generatingEpisode = ref(false)
 const episodeForm = reactive({ topic: '', episode_goal: '', extra_requirements: '' })
 const episodeIdea = ref('')
 const episodeConversationMessages = ref<Array<{ key: string; role: 'user' | 'ai'; text: string }>>([])
+const assetSuggestionDialogOpen = ref(false)
+const assetSuggestionSaving = ref(false)
+const pendingAssetSuggestions = ref<PendingAssetSuggestion[]>([])
+const assetSuggestionSelection = reactive<Record<string, boolean>>({})
+const selectedAssetSuggestions = computed(() =>
+  pendingAssetSuggestions.value.filter((item) => assetSuggestionSelection[item.key]),
+)
+const assetSuggestionGroups = computed(() => [
+  {
+    type: 'characters' as const,
+    label: '新人物',
+    icon: User,
+    items: pendingAssetSuggestions.value.filter((item) => item.asset_type === 'characters'),
+  },
+  {
+    type: 'worldviews' as const,
+    label: '新环境',
+    icon: House,
+    items: pendingAssetSuggestions.value.filter((item) => item.asset_type === 'worldviews'),
+  },
+].filter((group) => group.items.length))
 
 const reportDialogOpen = ref(false)
 const checking = ref(false)
@@ -3150,6 +3217,7 @@ async function onGenerateEpisode() {
     }
     addEpisodeToList(result)
     resetEpisodeDialog()
+    openAssetSuggestions(result.asset_suggestions)
     ElMessage.success('已生成单集方案')
   } finally {
     generatingEpisode.value = false
@@ -3209,6 +3277,7 @@ async function followEpisodeTask(task: AITask, seriesId: string) {
     if (newEpisode.series !== seriesId) throw new Error('生成的单集未关联到当前系列')
     addEpisodeToList(newEpisode)
     resetEpisodeDialog()
+    openAssetSuggestions(finished.result_payload.asset_suggestions)
     ElMessage.success('已生成单集方案')
   } catch (err) {
     if (!isAbortError(err)) {
@@ -3238,6 +3307,124 @@ async function followConsistencyTask(task: AITask, _seriesId: string) {
       removeActiveAITask(task.id)
       ElMessage.error(err instanceof Error ? err.message : '一致性检查失败')
     }
+  }
+}
+
+function openAssetSuggestions(value: unknown) {
+  const rows = normalizeAssetSuggestions(value)
+  if (!rows.length) return
+  clearAssetSuggestions()
+  pendingAssetSuggestions.value = rows
+  for (const row of rows) {
+    assetSuggestionSelection[row.key] = true
+  }
+  assetSuggestionDialogOpen.value = true
+}
+
+function normalizeAssetSuggestions(value: unknown): PendingAssetSuggestion[] {
+  if (!value || typeof value !== 'object') return []
+  const source = value as Partial<EpisodeAssetSuggestions>
+  const rows: PendingAssetSuggestion[] = []
+  const seen = new Set<string>()
+  const types: EpisodeSuggestionAssetType[] = ['characters', 'worldviews']
+  for (const type of types) {
+    const list = Array.isArray(source[type]) ? source[type] : []
+    const existing = new Set(assets[type].map((item) => nameKey(item.name)))
+    for (const raw of list) {
+      if (!raw || typeof raw !== 'object') continue
+      const name = textValue((raw as AssetSuggestion).name)
+      const nameId = nameKey(name)
+      const key = `${type}:${nameId}`
+      if (!name || !nameId || existing.has(nameId) || seen.has(key)) continue
+      const payload = (raw as AssetSuggestion).payload
+      const fixedTraits = (raw as AssetSuggestion).fixed_traits
+      rows.push({
+        key,
+        asset_type: type,
+        name,
+        payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {},
+        fixed_traits: Array.isArray(fixedTraits) ? fixedTraits : [],
+      })
+      seen.add(key)
+    }
+  }
+  return rows
+}
+
+function assetSuggestionSummary(item: PendingAssetSuggestion): string {
+  const payload = item.payload || {}
+  const candidates = item.asset_type === 'characters'
+    ? [payload.role, payload.appearance, payload.personality, payload.voice]
+    : [payload.purpose, payload.tone_color, payload.description]
+  const picked = firstFilled(candidates)
+  if (picked) return picked
+  if (Array.isArray(item.fixed_traits) && item.fixed_traits.length) {
+    return item.fixed_traits.slice(0, 3).map((trait) => String(trait)).join(' / ')
+  }
+  return item.asset_type === 'characters' ? '本集出现的新人物' : '本集出现的新小环境'
+}
+
+function clearAssetSuggestions() {
+  pendingAssetSuggestions.value = []
+  for (const key of Object.keys(assetSuggestionSelection)) {
+    delete assetSuggestionSelection[key]
+  }
+}
+
+function dismissAssetSuggestions() {
+  if (assetSuggestionSaving.value) return
+  assetSuggestionDialogOpen.value = false
+  clearAssetSuggestions()
+}
+
+async function confirmAssetSuggestions() {
+  const rows = selectedAssetSuggestions.value
+  if (!rows.length) return
+  const seriesId = route.params.id as string
+  assetSuggestionSaving.value = true
+  try {
+    const createdIds: Record<EpisodeSuggestionAssetType, string[]> = {
+      characters: [],
+      worldviews: [],
+    }
+    const resolvedAssets: Record<EpisodeSuggestionAssetType, AssetBase[]> = {
+      characters: [],
+      worldviews: [],
+    }
+    for (const row of rows) {
+      const existing = assets[row.asset_type].find((item) => nameKey(item.name) === nameKey(row.name))
+      const asset = existing || await assetsApi.create(row.asset_type, {
+        name: row.name,
+        payload: row.payload,
+        fixed_traits: row.fixed_traits,
+      })
+      resolvedAssets[row.asset_type].push(asset)
+      createdIds[row.asset_type].push(asset.id)
+    }
+
+    const nextCharacters = Array.from(new Set([...form.characters, ...createdIds.characters]))
+    const nextWorldviews = Array.from(new Set([...form.worldviews, ...createdIds.worldviews]))
+    await seriesApi.patch(seriesId, {
+      characters: nextCharacters,
+      worldviews: nextWorldviews,
+    })
+    for (const type of Object.keys(resolvedAssets) as EpisodeSuggestionAssetType[]) {
+      for (const asset of resolvedAssets[type]) {
+        assets[type] = [
+          asset,
+          ...assets[type].filter((item) => item.id !== asset.id),
+        ]
+      }
+    }
+    form.characters = nextCharacters
+    form.worldviews = nextWorldviews
+    assetSuggestionDialogOpen.value = false
+    clearAssetSuggestions()
+    ElMessage.success(`已加入 ${rows.length} 个系列资产`)
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '加入系列资产失败')
+  } finally {
+    assetSuggestionSaving.value = false
   }
 }
 
@@ -4981,6 +5168,57 @@ function isAbortError(err: unknown) {
   background: var(--vp-warning);
 }
 
+/* ========== 单集生成后的资产建议 ========== */
+.asset-suggestion-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.asset-suggestion-copy {
+  margin: 0;
+  color: var(--vp-text-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.asset-suggestion-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.asset-suggestion-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vp-text-1);
+  font-size: 13px;
+  font-weight: 700;
+}
+.asset-suggestion-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--vp-border-subtle);
+  cursor: pointer;
+}
+.asset-suggestion-item:last-child {
+  border-bottom: 0;
+}
+.asset-suggestion-item strong {
+  display: block;
+  color: var(--vp-text-1);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.asset-suggestion-item p {
+  margin: 4px 0 0;
+  color: var(--vp-text-3);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 /* ========== Consistency report (kept legacy styles, simplified) ========== */
 .report-head {
   display: flex; align-items: center; gap: 24px;
@@ -5175,6 +5413,9 @@ function isAbortError(err: unknown) {
   }
   .relationship-edit-row {
     grid-template-columns: 1fr;
+  }
+  .asset-suggestion-item {
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .relationship-dialog-body {
     max-height: none;

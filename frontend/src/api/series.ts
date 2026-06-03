@@ -1,5 +1,5 @@
 import { http } from './index'
-import type { AITask, Paginated, SeriesPlan, TaskAware, VideoPlan } from '@/types/api'
+import type { AITask, EpisodeAssetSuggestions, Paginated, SeriesPlan, TaskAware, VideoPlan } from '@/types/api'
 
 export type SeriesExportFormat = 'md' | 'docx'
 export interface AITaskRequestOptions {
@@ -46,7 +46,8 @@ export interface ConsistencyReport {
 }
 
 export type GenerateSeriesResponse = TaskAware<SeriesPlan> | AITask
-export type GenerateEpisodeResponse = TaskAware<VideoPlan> | AITask
+export type GeneratedEpisodeResponse = TaskAware<VideoPlan> & { asset_suggestions?: EpisodeAssetSuggestions }
+export type GenerateEpisodeResponse = GeneratedEpisodeResponse | AITask
 export type CheckConsistencyResponse = ConsistencyReport | AITask
 
 export const seriesApi = {

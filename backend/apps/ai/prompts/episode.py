@@ -4,7 +4,8 @@ SYSTEM = """你是 VidPlan AI 的系列视频单集规划助手。
 1. 不要修改资产中的 fixed_traits (人物外形、性格、风格关键词等),所有镜头描述都必须与之保持一致。
 2. 单集必须先拆成章节;如果系列配置了 episode_template.sections,章节顺序必须沿用该模板,否则生成 5-8 个章节。
 3. 本次只生成章节规划,不要生成具体分镜镜头;每个章节的 storyboard 必须为空数组。
-4. 输出严格 JSON,不要 markdown,不要解释。
+4. 如果本集主题或额外要求里出现了系列资产中不存在的新人物、新角色或明确的小环境,在 asset_suggestions 中提出建议;不要把它们直接写进正文当作已有资产。
+5. 输出严格 JSON,不要 markdown,不要解释。
 
 【关于章节规划的硬要求】
 content.sections 必须覆盖一集完整 15-20 分钟内容,每个章节都要说明"这一章讲什么 / 完成什么叙事或信息任务"。
@@ -40,6 +41,12 @@ USER_TEMPLATE = """请基于系列上下文生成一条单集方案。
 
 【相关资产 (含 fixed_traits, 必须保持一致)】
 {assets}
+
+【资产建议规则】
+- 只建议本集明确新增、且未来可能复用的人物或小环境。
+- 已在上方相关资产中存在的人物/环境不要重复建议。
+- 大环境不要放入 asset_suggestions.worldviews; worldviews 只放角色住处、基地、办公室、实验室、具体小店等小环境。
+- 如果没有新增人物或小环境,asset_suggestions 输出空数组。
 
 【前几集记忆】
 {previous_episodes}
@@ -82,6 +89,14 @@ USER_TEMPLATE = """请基于系列上下文生成一条单集方案。
   }},
   "storyboard": [],
   "editing_advice": {{"rhythm":"","music":"","subtitle":"","transition":"","tools":[]}},
-  "ai_prompts": {{"text_to_video":[],"image_to_video":[],"image_generation":[],"negative_prompt":""}}
+  "ai_prompts": {{"text_to_video":[],"image_to_video":[],"image_generation":[],"negative_prompt":""}},
+  "asset_suggestions": {{
+    "characters": [
+      {{"name":"新增角色名","payload":{{"role":"","appearance":"","personality":"","voice":""}},"fixed_traits":["不可变特征"]}}
+    ],
+    "worldviews": [
+      {{"name":"新增小环境名","payload":{{"tone_color":"","purpose":"","fixed_details":[]}},"fixed_traits":["固定环境特征"]}}
+    ]
+  }}
 }}
 """

@@ -375,7 +375,9 @@ class SeriesPlanViewSet(viewsets.ModelViewSet):
             return _ai_task_error_response(exc)
 
         plan = VideoPlan.objects.get(pk=result["plan_id"], user=request.user)
-        return Response(_with_task_id(VideoPlanSerializer(plan).data, task), status=status.HTTP_201_CREATED)
+        payload = _with_task_id(VideoPlanSerializer(plan).data, task)
+        payload["asset_suggestions"] = result.get("asset_suggestions", {})
+        return Response(payload, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="check-consistency")
     def check_consistency(self, request, pk=None):

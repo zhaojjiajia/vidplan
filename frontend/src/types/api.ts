@@ -118,6 +118,17 @@ export interface AssetBase {
 
 export type AssetType = 'characters' | 'styles' | 'worldviews' | 'columns'
 
+export interface AssetSuggestion {
+  name: string
+  payload: Record<string, unknown>
+  fixed_traits: unknown[]
+}
+
+export interface EpisodeAssetSuggestions {
+  characters: AssetSuggestion[]
+  worldviews: AssetSuggestion[]
+}
+
 export interface AssetSchemaField {
   key: string
   label: string

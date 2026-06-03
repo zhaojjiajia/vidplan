@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from apps.ai.models import AITask
 from apps.ai.services import AIPayloadError
-from apps.assets.models import CharacterAsset
+from apps.assets.models import CharacterAsset, WorldviewAsset
 
 from .ai_workflows import apply_ai_payload
 from .models import SeriesPlan, VideoPlan
@@ -604,6 +604,61 @@ class PlansAndAssetsAPITests(APITestCase):
         self.assertEqual(task.result_payload["series_id"], str(series.id))
         self.assertTrue(task.input_payload["auto_create_assets"])
 
+    @patch("apps.plans.ai_workflows.generate_series_plan")
+    def test_generate_series_repairs_missing_characters_and_big_environment_asset(self, mock_generate_series):
+        mock_generate_series.return_value = {
+            "title": "熊出没之暗网风云",
+            "summary": "光头强误入暗网后引发的连载短剧",
+            "direction": "ai_short_drama",
+            "positioning": {"core_concept": "森林反转短剧"},
+            "assets": {
+                "characters": [],
+                "worldviews": [
+                    {
+                        "name": "森林日常",
+                        "payload": {
+                            "purpose": "所有角色共同所处的森林背景",
+                            "tone_color": "浅绿色、荒诞、紧张",
+                            "fixed_details": ["森林秩序会被超能力打破"],
+                        },
+                        "fixed_traits": [],
+                    }
+                ],
+            },
+        }
+
+        idea = """
+熊出没之暗网风云：五号化合物
+光头强又被李老板扣光了工资。
+熊大（外号“屠夫”）：研究如何对抗光头强。
+吉吉国王（外号“法兰奇”）：研制毒气。
+毛毛（外号“喜美子”）：拥有自愈能力。
+蹦蹦：负责情报收集。
+熊二（外号“休伊”）：被迫拿起武器。
+"""
+        self.authenticate()
+        resp = self.client.post(
+            "/api/v1/series/generate/",
+            {
+                "direction": "ai_short_drama",
+                "idea": idea,
+                "target_platform": "抖音",
+                "auto_create_assets": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        series = SeriesPlan.objects.get(pk=resp.data["id"])
+        character_names = set(series.characters.values_list("name", flat=True))
+        self.assertIn("光头强", character_names)
+        self.assertIn("熊大", character_names)
+        self.assertIn("熊二", character_names)
+        self.assertNotIn("熊出没之暗网风云", character_names)
+        self.assertEqual(series.worldviews.count(), 0)
+        self.assertEqual(series.positioning["big_environment"]["name"], "森林日常")
+        self.assertFalse(WorldviewAsset.objects.filter(user=self.user, name="森林日常").exists())
+
     @patch("apps.plans.ai_workflows.generate_episode_plan")
     def test_generate_episode_sets_category_from_series_direction(self, mock_generate_episode):
         mock_generate_episode.return_value = {
@@ -643,6 +698,55 @@ class PlansAndAssetsAPITests(APITestCase):
         self.assertEqual(tasks.count(), 2)
         self.assertEqual(tasks[0].status, AITask.Status.SUCCEEDED)
         self.assertEqual(tasks[0].result_payload["series_id"], str(ai_series.id))
+
+    @patch("apps.plans.ai_workflows.generate_episode_plan")
+    def test_generate_episode_returns_asset_suggestions_without_creating_assets(self, mock_generate_episode):
+        mock_generate_episode.return_value = {
+            "title": "暗网风云第一集",
+            "summary": "新角色登场",
+            "content": {"sections": [{"title": "开头", "summary": "发现新线索", "storyboard": []}]},
+            "storyboard": [],
+            "asset_suggestions": {
+                "characters": [
+                    {"name": "光头强", "payload": {"role": "已有角色"}, "fixed_traits": []},
+                    {"name": "熊大", "payload": {"role": "新增核心角色"}, "fixed_traits": ["冷静"]},
+                ],
+                "worldviews": [
+                    {"name": "狗熊岭", "payload": {"purpose": "所有角色共同所处的大环境"}, "fixed_traits": []},
+                    {"name": "树屋基地", "payload": {"tone_color": "昏暗绿光", "purpose": "临时据点"}, "fixed_traits": ["藏在森林深处"]},
+                ],
+            },
+        }
+        series = self.create_series(
+            direction="ai_short_drama",
+            title="熊出没之暗网风云",
+        )
+        series.positioning = {
+            "big_environment": {
+                "name": "狗熊岭",
+                "description": "所有角色共同所处的森林大环境",
+            }
+        }
+        series.save()
+        character = CharacterAsset.objects.create(user=self.user, name="光头强")
+        series.characters.add(character)
+
+        self.authenticate()
+        resp = self.client.post(
+            f"/api/v1/series/{series.id}/episodes/",
+            {"topic": "熊大加入对抗光头强"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        suggestions = resp.data["asset_suggestions"]
+        self.assertEqual([item["name"] for item in suggestions["characters"]], ["熊大"])
+        self.assertEqual([item["name"] for item in suggestions["worldviews"]], ["树屋基地"])
+        self.assertEqual(series.characters.count(), 1)
+        self.assertFalse(CharacterAsset.objects.filter(user=self.user, name="熊大").exists())
+        self.assertFalse(WorldviewAsset.objects.filter(user=self.user, name="树屋基地").exists())
+        task = AITask.objects.get(pk=resp.data["task_id"])
+        self.assertEqual(task.result_payload["asset_suggestions"], suggestions)
 
     @patch("apps.plans.ai_workflows.check_series_consistency")
     def test_check_consistency_returns_ai_report(self, mock_check_consistency):

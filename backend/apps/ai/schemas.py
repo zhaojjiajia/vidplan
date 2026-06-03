@@ -59,6 +59,7 @@ class SinglePlanPayload(BaseModel):
     storyboard: list[StoryboardShot] = Field(default_factory=list)
     editing_advice: dict[str, Any] = Field(default_factory=dict)
     ai_prompts: dict[str, Any] = Field(default_factory=dict)
+    asset_suggestions: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("direction", mode="before")
     @classmethod

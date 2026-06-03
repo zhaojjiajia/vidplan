@@ -405,6 +405,17 @@ def _list_of_text(value: Any) -> list[str]:
     return []
 
 
+def _asset_specs(value: Any) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _normalize_asset_bundle(value: Any) -> dict[str, list[dict]]:
+    raw = value if isinstance(value, dict) else {}
+    return {atype: _asset_specs(raw.get(atype)) for atype in ASSET_MODEL_BY_TYPE}
+
+
 def _normalize_big_environment(value: Any, *, fallback_title: str, fallback_summary: str) -> dict:
     if isinstance(value, str):
         raw = {"description": value}
@@ -427,15 +438,232 @@ def _normalize_big_environment(value: Any, *, fallback_title: str, fallback_summ
     }
 
 
+def _big_environment_from_worldview_spec(spec: dict, *, fallback_title: str, fallback_summary: str) -> dict:
+    payload = spec.get("payload") if isinstance(spec.get("payload"), dict) else {}
+    fixed_traits = spec.get("fixed_traits") if isinstance(spec.get("fixed_traits"), list) else []
+    raw = {
+        "name": _text(spec.get("name")),
+        "description": _text(
+            payload.get("description")
+            or payload.get("purpose")
+            or payload.get("world_rules")
+            or payload.get("setting")
+            or payload.get("summary")
+        ),
+        "tone_color": _text(payload.get("tone_color") or payload.get("tone") or payload.get("color")),
+        "rules": payload.get("rules") or payload.get("fixed_details") or fixed_traits,
+        "locations": payload.get("locations") or payload.get("places") or payload.get("representative_locations"),
+        "images": spec.get("images") if isinstance(spec.get("images"), list) else payload.get("images"),
+    }
+    return _normalize_big_environment(raw, fallback_title=fallback_title, fallback_summary=fallback_summary)
+
+
+def _is_generic_big_environment(big_environment: dict) -> bool:
+    generic_names = {
+        "系列大环境",
+        "大环境",
+        "故事背景",
+        "故事大环境",
+        "背景环境",
+        "总体环境",
+        "主环境",
+        "共同环境",
+        "世界背景",
+        "故事世界",
+        "故事舞台",
+        "系列背景",
+    }
+    return _text(big_environment.get("name")) in generic_names
+
+
+def _worldview_text(spec: dict) -> str:
+    payload = spec.get("payload") if isinstance(spec.get("payload"), dict) else {}
+    fixed_traits = spec.get("fixed_traits") if isinstance(spec.get("fixed_traits"), list) else []
+    values = [_text(spec.get("name"))]
+    values.extend(_text(value) for value in payload.values() if not isinstance(value, (list, dict)))
+    values.extend(_text(item) for item in fixed_traits)
+    return " ".join(value for value in values if value)
+
+
+def _is_small_environment_worldview(spec: dict) -> bool:
+    text = _worldview_text(spec)
+    small_keywords = [
+        "居住",
+        "住处",
+        "家中",
+        "家里",
+        "家庭",
+        "住家",
+        "小屋",
+        "房间",
+        "出租屋",
+        "卧室",
+        "宿舍",
+        "办公室",
+        "工作间",
+        "店",
+        "小店",
+        "基地",
+        "实验室",
+        "教室",
+        "医院",
+        "公司",
+        "总部",
+        "厨房",
+        "车内",
+    ]
+    return any(keyword in text for keyword in small_keywords)
+
+
+def _looks_like_big_environment_worldview(spec: dict) -> bool:
+    if _is_small_environment_worldview(spec):
+        return False
+    text = _worldview_text(spec)
+    broad_keywords = [
+        "大环境",
+        "世界",
+        "背景",
+        "森林",
+        "校园",
+        "城市",
+        "都市",
+        "小镇",
+        "海边",
+        "山谷",
+        "乡村",
+        "宇宙",
+        "王国",
+        "江湖",
+        "赛博",
+        "未来",
+        "古代",
+        "末世",
+        "暗网",
+        "社区",
+        "狗熊岭",
+    ]
+    return any(keyword in text for keyword in broad_keywords)
+
+
+def _promote_big_environment_from_worldviews(
+    big_environment: dict,
+    worldview_specs: list[dict],
+    *,
+    fallback_title: str,
+    fallback_summary: str,
+) -> tuple[dict, list[dict]]:
+    if not worldview_specs or not _is_generic_big_environment(big_environment):
+        return big_environment, worldview_specs
+
+    candidate_index = next(
+        (index for index, spec in enumerate(worldview_specs) if _looks_like_big_environment_worldview(spec)),
+        0 if len(worldview_specs) == 1 else -1,
+    )
+    if candidate_index < 0:
+        return big_environment, worldview_specs
+
+    promoted = _big_environment_from_worldview_spec(
+        worldview_specs[candidate_index],
+        fallback_title=fallback_title,
+        fallback_summary=fallback_summary,
+    )
+    return promoted, [spec for index, spec in enumerate(worldview_specs) if index != candidate_index]
+
+
 def _is_big_environment_worldview(spec: dict, big_environment: dict) -> bool:
     name = _asset_key(_text(spec.get("name")))
     big_name = _asset_key(_text(big_environment.get("name")))
     if not name:
         return False
-    generic_names = {"故事背景", "世界观", "大环境", "系列大环境", "背景环境"}
-    if _text(spec.get("name")) in generic_names:
+    generic_names = {"故事背景", "世界观", "大环境", "系列大环境", "背景环境", "故事世界", "故事舞台", "系列背景"}
+    if _text(spec.get("name")) in generic_names or _looks_like_big_environment_worldview(spec):
         return True
     return bool(big_name and (name == big_name or name in big_name or big_name in name))
+
+
+def _clean_character_name(value: Any) -> str:
+    name = _text(value)
+    name = re.sub(r"^[\d一二三四五六七八九十]+[.、]\s*", "", name)
+    name = re.sub(r"[（(].*$", "", name).strip(" \t\r\n'\"“”‘’《》<>:：,，.。;；")
+    blocked = ["序幕", "蜕变", "反转", "剧情", "大纲", "开场", "主体", "结尾", "能力", "环境", "系列", "故事"]
+    if not (1 < len(name) <= 12) or any(word in name for word in blocked) or ("之" in name and len(name) > 4):
+        return ""
+    return name
+
+
+def _append_character_name(names: list[str], value: Any) -> None:
+    name = _clean_character_name(value)
+    if name and name not in names:
+        names.append(name)
+
+
+def _extract_character_names_from_idea(idea: str, relationships: list[dict]) -> list[str]:
+    names: list[str] = []
+    for row in relationships:
+        _append_character_name(names, row.get("from") or row.get("from_asset_name"))
+        _append_character_name(names, row.get("to") or row.get("to_asset_name"))
+
+    for match in re.finditer(r"(?:^|\n)\s*(?:[-*]\s*)?([^\n:：()（）]{2,12})(?:[（(][^）)]{0,40}[）)])?\s*[:：]", idea):
+        _append_character_name(names, match.group(1))
+    for match in re.finditer(r"([\u4e00-\u9fffA-Za-z0-9·]{2,12})[（(](?:外号|代号|身份|角色)", idea):
+        _append_character_name(names, match.group(1))
+    for match in re.finditer(r"([\u4e00-\u9fff]{1,6}(?:老板|国王|队长|老师|医生|妈妈|爸爸|哥哥|姐姐|小姐|先生))", idea):
+        _append_character_name(names, match.group(1))
+    for match in re.finditer(r"([\u4e00-\u9fff]{2,4}强)(?=又|被|将|飞|用|从|像|把|直接|颤抖|误入|的)", idea):
+        _append_character_name(names, match.group(1))
+    return names[:8]
+
+
+def _should_create_fallback_characters(direction: str, idea: str, relationships: list[dict]) -> bool:
+    if relationships:
+        return True
+    if direction in AI_GENERATED_DIRECTIONS:
+        return True
+    narrative_keywords = ["剧情", "短剧", "动画", "角色", "人物", "主角", "反派", "连载", "世界观", "大纲"]
+    return any(keyword in idea for keyword in narrative_keywords)
+
+
+def _fallback_character_specs(idea: str, relationships: list[dict]) -> list[dict]:
+    specs = []
+    for name in _extract_character_names_from_idea(idea, relationships):
+        specs.append(
+            {
+                "name": name,
+                "payload": {"role": "主要角色", "appearance": "", "personality": "", "voice": ""},
+                "fixed_traits": [],
+            }
+        )
+    return specs
+
+
+def _normalize_episode_asset_suggestions(value: Any, assets_dict: dict, big_environment: dict) -> dict[str, list[dict]]:
+    raw = _normalize_asset_bundle(value)
+    out = {"characters": [], "worldviews": []}
+    for atype in out:
+        existing_names = {
+            _asset_key(_text(item.get("name")))
+            for item in assets_dict.get(atype, [])
+            if isinstance(item, dict) and _text(item.get("name"))
+        }
+        seen_names = set(existing_names)
+        for spec in raw.get(atype, []):
+            name = _text(spec.get("name"))[:120]
+            key = _asset_key(name)
+            if not name or not key or key in seen_names:
+                continue
+            if atype == "worldviews" and _is_big_environment_worldview(spec, big_environment):
+                continue
+            payload = spec.get("payload") if isinstance(spec.get("payload"), dict) else {}
+            fixed_traits = spec.get("fixed_traits") if isinstance(spec.get("fixed_traits"), list) else []
+            out[atype].append(
+                {
+                    "name": name,
+                    "payload": payload,
+                    "fixed_traits": fixed_traits,
+                }
+            )
+            seen_names.add(key)
+    return out
 
 
 def _attach_relationship_asset_ids(
@@ -595,6 +823,7 @@ def execute_generate_series_task(task: AITask) -> dict:
     positioning = ai_payload.get("positioning", {})
     if not isinstance(positioning, dict):
         positioning = {}
+    asset_bundle = _normalize_asset_bundle(ai_payload.get("assets"))
     big_environment = _normalize_big_environment(
         positioning.get("big_environment") or ai_payload.get("big_environment"),
         fallback_title=ai_payload.get("title", ""),
@@ -602,6 +831,12 @@ def execute_generate_series_task(task: AITask) -> dict:
     )
     relationships = _normalize_series_relationships(
         ai_payload.get("relationships") or positioning.get("relationships") or []
+    )
+    big_environment, asset_bundle["worldviews"] = _promote_big_environment_from_worldviews(
+        big_environment,
+        asset_bundle["worldviews"],
+        fallback_title=ai_payload.get("title", ""),
+        fallback_summary=ai_payload.get("summary", ""),
     )
     positioning = {**positioning, "big_environment": big_environment, "relationships": relationships}
     series = SeriesPlan.objects.create(
@@ -630,14 +865,15 @@ def execute_generate_series_task(task: AITask) -> dict:
         "worldviews": {},
     }
     if auto_create:
-        asset_bundle = ai_payload.get("assets", {}) or {}
-        if not isinstance(asset_bundle, dict):
-            asset_bundle = {}
+        if not asset_bundle["characters"] and _should_create_fallback_characters(
+            resolved_direction,
+            data.get("idea", ""),
+            relationships,
+        ):
+            asset_bundle["characters"] = _fallback_character_specs(data.get("idea", ""), relationships)
         for atype, (model_cls, _ser, m2m_name) in ASSET_MODEL_BY_TYPE.items():
             created_asset_ids = []
-            for spec in asset_bundle.get(atype, []) or []:
-                if not isinstance(spec, dict):
-                    continue
+            for spec in asset_bundle.get(atype, []):
                 if atype == "worldviews" and _is_big_environment_worldview(spec, big_environment):
                     continue
                 name = (spec.get("name") or "").strip()[:120] or "未命名"
@@ -688,6 +924,13 @@ def execute_generate_episode_task(task: AITask) -> dict:
     )
     ai_payload = _normalize_plan_sections(ai_payload)
     ai_payload = _strip_initial_storyboards(ai_payload)
+    positioning = series.positioning if isinstance(series.positioning, dict) else {}
+    asset_suggestions = _normalize_episode_asset_suggestions(
+        ai_payload.get("asset_suggestions")
+        or (ai_payload.get("content", {}) if isinstance(ai_payload.get("content"), dict) else {}).get("asset_suggestions"),
+        assets_dict,
+        positioning.get("big_environment", {}) if isinstance(positioning.get("big_environment"), dict) else {},
+    )
 
     is_ai_direction = series.direction in AI_GENERATED_DIRECTIONS
     plan = VideoPlan.objects.create(
@@ -711,7 +954,12 @@ def execute_generate_episode_task(task: AITask) -> dict:
         ai_prompts=ai_payload.get("ai_prompts", {}),
         episode_order=_next_episode_order(series),
     )
-    return {"plan_id": str(plan.id), "series_id": str(series.id), "title": plan.title}
+    return {
+        "plan_id": str(plan.id),
+        "series_id": str(series.id),
+        "title": plan.title,
+        "asset_suggestions": asset_suggestions,
+    }
 
 
 def execute_check_consistency_task(task: AITask) -> dict:
