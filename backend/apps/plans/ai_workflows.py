@@ -360,6 +360,35 @@ def _asset_id_for_name(name: str, lookup: dict[str, dict[str, str]]) -> str:
     return ""
 
 
+def _asset_ref_for_name(name: str, lookup: dict[str, dict[str, str]]) -> tuple[str, str]:
+    key = _asset_key(name)
+    if not key:
+        return "", ""
+    for atype, by_name in lookup.items():
+        if key in by_name:
+            return by_name[key], atype
+    return "", ""
+
+
+def _normalize_relationship_asset_type(value: Any) -> str:
+    raw = _text(value).lower()
+    aliases = {
+        "character": "characters",
+        "characters": "characters",
+        "人物": "characters",
+        "角色": "characters",
+        "worldview": "worldviews",
+        "worldviews": "worldviews",
+        "environment": "worldviews",
+        "environments": "worldviews",
+        "环境": "worldviews",
+        "小环境": "worldviews",
+        "场景": "worldviews",
+        "地点": "worldviews",
+    }
+    return aliases.get(raw, "")
+
+
 def _normalize_series_relationships(value: Any) -> list[dict]:
     if not isinstance(value, list):
         return []
@@ -382,6 +411,12 @@ def _normalize_series_relationships(value: Any) -> list[dict]:
         )
         label = _text(item.get("label") or item.get("relation") or item.get("relationship") or item.get("type"))
         description = _text(item.get("description") or item.get("note") or item.get("summary"))
+        from_type = _normalize_relationship_asset_type(
+            item.get("from_type") or item.get("from_asset_type") or item.get("source_type")
+        )
+        to_type = _normalize_relationship_asset_type(
+            item.get("to_type") or item.get("to_asset_type") or item.get("target_type")
+        )
         if not (from_name or to_name or label or description):
             continue
         rows.append(
@@ -392,6 +427,8 @@ def _normalize_series_relationships(value: Any) -> list[dict]:
                 "description": description,
                 "from_asset_name": _text(item.get("from_asset_name")) or from_name,
                 "to_asset_name": _text(item.get("to_asset_name")) or to_name,
+                "from_asset_type": from_type,
+                "to_asset_type": to_type,
             }
         )
     return rows
@@ -638,8 +675,11 @@ def _fallback_character_specs(idea: str, relationships: list[dict]) -> list[dict
 
 def _normalize_episode_asset_suggestions(value: Any, assets_dict: dict, big_environment: dict) -> dict[str, list[dict]]:
     raw = _normalize_asset_bundle(value)
-    out = {"characters": [], "worldviews": []}
+    relation_source = value if isinstance(value, dict) else {}
+    out: dict[str, list[dict]] = {"characters": [], "worldviews": [], "relationships": []}
     for atype in out:
+        if atype == "relationships":
+            continue
         existing_names = {
             _asset_key(_text(item.get("name")))
             for item in assets_dict.get(atype, [])
@@ -663,6 +703,12 @@ def _normalize_episode_asset_suggestions(value: Any, assets_dict: dict, big_envi
                 }
             )
             seen_names.add(key)
+    out["relationships"] = [
+        row for row in _normalize_series_relationships(relation_source.get("relationships"))
+        if (row.get("from") or row.get("from_asset_name"))
+        and (row.get("to") or row.get("to_asset_name"))
+        and (row.get("label") or row.get("description"))
+    ]
     return out
 
 
@@ -675,12 +721,16 @@ def _attach_relationship_asset_ids(
         from_name = row.get("from_asset_name") or row.get("from") or ""
         to_name = row.get("to_asset_name") or row.get("to") or ""
         enriched = dict(row)
-        from_id = _asset_id_for_name(from_name, lookup)
-        to_id = _asset_id_for_name(to_name, lookup)
+        from_id, from_type = _asset_ref_for_name(from_name, lookup)
+        to_id, to_type = _asset_ref_for_name(to_name, lookup)
         if from_id:
             enriched["from_asset_id"] = from_id
+            if from_type:
+                enriched["from_asset_type"] = from_type
         if to_id:
             enriched["to_asset_id"] = to_id
+            if to_type:
+                enriched["to_asset_type"] = to_type
         out.append(enriched)
     return out
 

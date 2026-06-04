@@ -659,6 +659,60 @@ class PlansAndAssetsAPITests(APITestCase):
         self.assertEqual(series.positioning["big_environment"]["name"], "森林日常")
         self.assertFalse(WorldviewAsset.objects.filter(user=self.user, name="森林日常").exists())
 
+    @patch("apps.plans.ai_workflows.generate_series_plan")
+    def test_generate_series_maps_asset_relationships_to_canvas_assets(self, mock_generate_series):
+        mock_generate_series.return_value = {
+            "title": "独居女孩日常",
+            "summary": "女孩和城市角落的温暖故事",
+            "direction": "ai_short_drama",
+            "positioning": {
+                "core_concept": "城市治愈日常",
+                "big_environment": {
+                    "name": "老城区",
+                    "description": "所有角色共同生活的城市街区",
+                },
+            },
+            "assets": {
+                "characters": [
+                    {"name": "林小满", "payload": {"role": "主角"}, "fixed_traits": ["独居女孩"]}
+                ],
+                "worldviews": [
+                    {"name": "林小满的出租屋", "payload": {"purpose": "居住环境"}, "fixed_traits": ["窗边有绿植"]}
+                ],
+            },
+            "relationships": [
+                {
+                    "from": "林小满",
+                    "from_type": "characters",
+                    "to": "林小满的出租屋",
+                    "to_type": "worldviews",
+                    "label": "居住",
+                }
+            ],
+        }
+
+        self.authenticate()
+        resp = self.client.post(
+            "/api/v1/series/generate/",
+            {
+                "direction": "ai_short_drama",
+                "idea": "林小满住在老城区出租屋,记录独居生活。",
+                "auto_create_assets": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        series = SeriesPlan.objects.get(pk=resp.data["id"])
+        character = series.characters.get(name="林小满")
+        worldview = series.worldviews.get(name="林小满的出租屋")
+        relationship = series.positioning["relationships"][0]
+        self.assertEqual(relationship["from_asset_id"], str(character.id))
+        self.assertEqual(relationship["from_asset_type"], "characters")
+        self.assertEqual(relationship["to_asset_id"], str(worldview.id))
+        self.assertEqual(relationship["to_asset_type"], "worldviews")
+        self.assertEqual(relationship["label"], "居住")
+
     @patch("apps.plans.ai_workflows.generate_episode_plan")
     def test_generate_episode_sets_category_from_series_direction(self, mock_generate_episode):
         mock_generate_episode.return_value = {
@@ -715,6 +769,15 @@ class PlansAndAssetsAPITests(APITestCase):
                     {"name": "狗熊岭", "payload": {"purpose": "所有角色共同所处的大环境"}, "fixed_traits": []},
                     {"name": "树屋基地", "payload": {"tone_color": "昏暗绿光", "purpose": "临时据点"}, "fixed_traits": ["藏在森林深处"]},
                 ],
+                "relationships": [
+                    {
+                        "from": "熊大",
+                        "from_type": "characters",
+                        "to": "树屋基地",
+                        "to_type": "worldviews",
+                        "label": "据点",
+                    }
+                ],
             },
         }
         series = self.create_series(
@@ -742,6 +805,9 @@ class PlansAndAssetsAPITests(APITestCase):
         suggestions = resp.data["asset_suggestions"]
         self.assertEqual([item["name"] for item in suggestions["characters"]], ["熊大"])
         self.assertEqual([item["name"] for item in suggestions["worldviews"]], ["树屋基地"])
+        self.assertEqual(suggestions["relationships"][0]["label"], "据点")
+        self.assertEqual(suggestions["relationships"][0]["from_asset_type"], "characters")
+        self.assertEqual(suggestions["relationships"][0]["to_asset_type"], "worldviews")
         self.assertEqual(series.characters.count(), 1)
         self.assertFalse(CharacterAsset.objects.filter(user=self.user, name="熊大").exists())
         self.assertFalse(WorldviewAsset.objects.filter(user=self.user, name="树屋基地").exists())

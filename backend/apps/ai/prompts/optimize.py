@@ -6,7 +6,7 @@ SCOPE_INSTRUCTIONS = {
     "full": "整体优化方案: 检查分镜衔接、情绪递进、开头吸引力、结尾记忆点、是否缺素材、转场、字幕配音建议。返回完整 plan 字段。",
     "title": "只优化 title 字段,生成更具传播力的标题。",
     "hook": "只优化 content.structure.hook (开头 0-3 秒钩子),让其更抓眼球。",
-    "storyboard": "优化分镜脚本。若方案包含 content.sections,优先按章节生成或优化 content.sections[*].storyboard,并同步返回顶层 storyboard 扁平数组;不要改动无关章节标题与摘要。每个镜头必须包含 duration 字段,值为数字秒数,不要返回 0 或空值。若当前方案 JSON 包含 _series_context,生成章节分镜时必须结合系列定位、章节模板、视觉风格、资产与人物关系。",
+    "storyboard": "优化分镜脚本。若方案包含 content.sections,优先按章节生成或优化 content.sections[*].storyboard,并同步返回顶层 storyboard 扁平数组;不要改动无关章节标题与摘要。每个镜头必须包含 duration 字段,值为数字秒数,不要返回 0 或空值。若当前方案 JSON 包含 _series_context,生成章节分镜时必须结合系列定位、章节模板、视觉风格、资产关系。",
     "editing": "只优化 editing_advice 字段,补充剪映/剪辑实操步骤。",
     "ai_prompt": "只优化 ai_prompts 与 storyboard[*].ai_prompt,使提示词更精准。",
 }

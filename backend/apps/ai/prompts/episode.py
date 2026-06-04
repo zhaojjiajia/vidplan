@@ -46,6 +46,7 @@ USER_TEMPLATE = """请基于系列上下文生成一条单集方案。
 - 只建议本集明确新增、且未来可能复用的人物或小环境。
 - 已在上方相关资产中存在的人物/环境不要重复建议。
 - 大环境不要放入 asset_suggestions.worldviews; worldviews 只放角色住处、基地、办公室、实验室、具体小店等小环境。
+- 如果新增资产和已有资产之间有明确关系,在 asset_suggestions.relationships 中输出关系;只输出明确标注或强推断的关系,不要默认全连接。
 - 如果没有新增人物或小环境,asset_suggestions 输出空数组。
 
 【前几集记忆】
@@ -96,6 +97,9 @@ USER_TEMPLATE = """请基于系列上下文生成一条单集方案。
     ],
     "worldviews": [
       {{"name":"新增小环境名","payload":{{"tone_color":"","purpose":"","fixed_details":[]}},"fixed_traits":["固定环境特征"]}}
+    ],
+    "relationships": [
+      {{"from":"已有或新增资产名","from_type":"characters","to":"已有或新增小环境名","to_type":"worldviews","label":"关系,如居住/工作/同盟/冲突","description":""}}
     ]
   }}
 }}

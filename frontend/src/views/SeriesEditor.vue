@@ -62,11 +62,11 @@
             <button
               type="button"
               class="canvas-tool"
-              title="编辑人物关系"
-              aria-label="编辑人物关系"
+              title="编辑资产关系"
+              aria-label="编辑资产关系"
               @click="openRelationshipDialog"
             >
-              <el-icon><User /></el-icon>
+              <el-icon><Connection /></el-icon>
             </button>
             <el-dropdown trigger="click" placement="bottom-end" @command="openCanvasAsset">
               <button
@@ -125,11 +125,7 @@
 		                    @click.stop="openRelationEditor(line)"
 	                  />
                   <text
-                    v-if="
-                      line.relation.label &&
-                      !isEnvironmentRelation(line) &&
-                      activeRelationId !== line.relation.id
-                    "
+                    v-if="line.relation.label && activeRelationId !== line.relation.id"
 	                    :class="['pin-line-label', { 'is-editing': activeRelationId === line.relation.id }]"
 	                    :x="lineLabelPosition(line).x"
 	                    :y="lineLabelPosition(line).y"
@@ -167,12 +163,11 @@
 	                @pointerdown.stop
 	              >
 		                <input
-		                  v-if="!isEnvironmentRelation(activeRelationLine)"
 		                  ref="relationInputRef"
 		                  v-model="relationDraft"
 		                  placeholder="关系"
-	                  @keydown.enter.prevent="commitRelationEditor"
-	                  @keydown.esc.prevent="closeRelationEditor"
+		                  @keydown.enter.prevent="commitRelationEditor"
+		                  @keydown.esc.prevent="closeRelationEditor"
 		                  @blur="commitRelationEditor"
 		                />
 		                <button
@@ -282,7 +277,7 @@
             <strong>{{ episodeProgressText }}</strong>
             <button type="button" class="ghost-tool episode-relation-tool" @click="goRelationshipPage">
               <el-icon><View /></el-icon>
-              人物关系
+              资产关系
             </button>
           </div>
         </div>
@@ -433,10 +428,6 @@
                   </el-select>
                 </td>
               </tr>
-              <tr>
-                <th>人物关系</th>
-                <td><span class="muted">暂无</span></td>
-              </tr>
               <tr v-for="row in positioningRows" :key="row.key">
                 <th>{{ row.label }}</th>
                 <td>
@@ -501,17 +492,6 @@
                     :value="item.value"
                   />
                 </el-select>
-              </td>
-            </tr>
-            <tr>
-              <th>人物关系</th>
-              <td>
-                <div v-if="relationshipDisplayRows.length" class="relationship-text-list">
-                  <p v-for="row in relationshipDisplayRows" :key="relationshipDisplayKey(row)">
-                    {{ relationshipDisplayText(row) }}
-                  </p>
-                </div>
-                <span v-else class="muted">暂无</span>
               </td>
             </tr>
             <tr v-for="row in positioningRows" :key="row.key">
@@ -770,14 +750,14 @@
 
     <el-dialog
       v-model="relationshipDialogOpen"
-      title="人物关系"
+      title="资产关系"
       width="760px"
       :close-on-click-modal="false"
       class="relationship-edit-dialog"
     >
       <div class="relationship-dialog-body">
-        <div v-if="selectedAssetsMap.characters.length < 2" class="empty-state">
-          <p>至少关联两个角色后,才能编辑人物关系。</p>
+        <div v-if="relationshipAssetOptions.length < 2" class="empty-state">
+          <p>至少关联两个资产后,才能编辑资产关系。</p>
         </div>
         <template v-else>
           <div
@@ -785,23 +765,23 @@
             :key="`relationship-draft-${idx}`"
             class="relationship-edit-row"
           >
-            <el-select v-model="row.from_asset_id" filterable placeholder="人物 A">
+            <el-select v-model="row.from_asset_id" filterable placeholder="资产 A">
               <el-option
-                v-for="item in selectedAssetsMap.characters"
+                v-for="item in relationshipAssetOptions"
                 :key="item.id"
-                :label="item.name"
+                :label="relationshipAssetOptionLabel(item)"
                 :value="item.id"
               />
             </el-select>
-            <el-select v-model="row.to_asset_id" filterable placeholder="人物 B">
+            <el-select v-model="row.to_asset_id" filterable placeholder="资产 B">
               <el-option
                 v-for="item in relationshipTargetOptions(row)"
                 :key="item.id"
-                :label="item.name"
+                :label="relationshipAssetOptionLabel(item)"
                 :value="item.id"
               />
             </el-select>
-            <el-input v-model="row.label" placeholder="关系,如朋友 / 师徒" />
+            <el-input v-model="row.label" placeholder="关系,如朋友 / 居住 / 工作 / 冲突" />
             <el-button
               text
               type="danger"
@@ -814,7 +794,7 @@
             text
             size="small"
             :icon="Plus"
-            :disabled="selectedAssetsMap.characters.length < 2"
+            :disabled="relationshipAssetOptions.length < 2"
             @click="addRelationshipDraft"
           >
             添加关系
@@ -922,7 +902,7 @@
     >
       <div class="asset-suggestion-dialog">
         <p class="asset-suggestion-copy">
-          AI 在本集里发现了新的角色或小环境，确认后会加入当前系列资产。
+          AI 在本集里发现了新的角色、小环境或资产关系，确认后会同步到当前系列。
         </p>
         <div v-for="group in assetSuggestionGroups" :key="group.type" class="asset-suggestion-group">
           <div class="asset-suggestion-group-title">
@@ -937,16 +917,29 @@
             </div>
           </label>
         </div>
+        <div v-if="pendingRelationshipSuggestions.length" class="asset-suggestion-group">
+          <div class="asset-suggestion-group-title">
+            <el-icon><Connection /></el-icon>
+            <span>资产关系</span>
+          </div>
+          <label v-for="item in pendingRelationshipSuggestions" :key="relationshipDisplayKey(item)" class="asset-suggestion-item">
+            <el-checkbox :model-value="true" disabled />
+            <div>
+              <strong>{{ relationshipDisplayText(item) }}</strong>
+              <p>确认后会映射到关系画布</p>
+            </div>
+          </label>
+        </div>
       </div>
       <template #footer>
         <el-button @click="dismissAssetSuggestions" :disabled="assetSuggestionSaving">跳过</el-button>
         <el-button
           type="primary"
           :loading="assetSuggestionSaving"
-          :disabled="!selectedAssetSuggestions.length"
+          :disabled="!selectedAssetSuggestions.length && !pendingRelationshipSuggestions.length"
           @click="confirmAssetSuggestions"
         >
-          加入系列资产
+          同步到系列
         </el-button>
       </template>
     </el-dialog>
@@ -1200,6 +1193,7 @@ const sections = reactive({
 type PinPanel = 'series' | 'positioning' | 'template' | 'style' | 'assets' | 'topics'
 type PinKind = 'asset'
 type PinLineKind = 'relationship'
+type RelationshipAssetType = 'characters' | 'worldviews'
 type BoardTool = 'select' | 'move'
 type ConnectSide = 'top' | 'right' | 'bottom' | 'left'
 
@@ -1218,6 +1212,8 @@ interface SeriesRelationship {
   description: string
   from_asset_id?: string
   to_asset_id?: string
+  from_asset_type?: RelationshipAssetType
+  to_asset_type?: RelationshipAssetType
   from_asset_name?: string
   to_asset_name?: string
 }
@@ -1226,6 +1222,12 @@ interface RelationshipEditDraft {
   from_asset_id: string
   to_asset_id: string
   label: string
+}
+
+interface RelationshipAssetOption {
+  id: string
+  type: RelationshipAssetType
+  name: string
 }
 
 interface BigEnvironment {
@@ -1438,6 +1440,7 @@ const pinLines = computed<PinLine[]>(() => {
   const lines: PinLine[] = []
   for (const relation of relationEdges.value) {
     if (relation.deleted) continue
+    if (!relation.label.trim() && activeRelationId.value !== relation.id) continue
     const from = byId.get(relation.fromId)
     const to = byId.get(relation.toId)
     if (!from || !to) continue
@@ -1531,6 +1534,7 @@ const episodeConversationMessages = ref<Array<{ key: string; role: 'user' | 'ai'
 const assetSuggestionDialogOpen = ref(false)
 const assetSuggestionSaving = ref(false)
 const pendingAssetSuggestions = ref<PendingAssetSuggestion[]>([])
+const pendingRelationshipSuggestions = ref<SeriesRelationship[]>([])
 const assetSuggestionSelection = reactive<Record<string, boolean>>({})
 const selectedAssetSuggestions = computed(() =>
   pendingAssetSuggestions.value.filter((item) => assetSuggestionSelection[item.key]),
@@ -1616,6 +1620,11 @@ const selectedAssetsMap = computed<Record<AssetType, AssetBase[]>>(() => {
   }
   return out
 })
+
+const relationshipAssetOptions = computed<RelationshipAssetOption[]>(() => [
+  ...selectedAssetsMap.value.characters.map((item) => ({ id: item.id, type: 'characters' as const, name: item.name })),
+  ...selectedAssetsMap.value.worldviews.map((item) => ({ id: item.id, type: 'worldviews' as const, name: item.name })),
+])
 
 const overviewStats = computed(() => [
   { label: '方向', value: findDirectionLabel(form.direction) },
@@ -2212,7 +2221,7 @@ function isEnvironmentRelation(line: PinLine): boolean {
 }
 
 function isEditableRelation(line: PinLine): boolean {
-  return boardTool.value === 'select' && !isEnvironmentRelation(line)
+  return boardTool.value === 'select'
 }
 
 function openRelationEditor(line: PinLine) {
@@ -2234,13 +2243,13 @@ function relationEditorStyle(line: PinLine) {
 
 function commitRelationEditor() {
   if (!activeRelationId.value) return
-  if (activeRelationLine.value && isEnvironmentRelation(activeRelationLine.value)) return
   const label = relationDraft.value.trim()
   relationEdges.value = relationEdges.value.map((relation) =>
-    relation.id === activeRelationId.value ? { ...relation, label } : relation,
+    relation.id === activeRelationId.value ? { ...relation, label, deleted: !label } : relation,
   )
   persistRelations()
   closeRelationEditor()
+  void autoSaveSeries()
 }
 
 function deleteActiveRelation() {
@@ -2250,6 +2259,7 @@ function deleteActiveRelation() {
   )
   persistRelations()
   closeRelationEditor()
+  void autoSaveSeries()
 }
 
 function closeRelationEditor() {
@@ -2259,7 +2269,10 @@ function closeRelationEditor() {
 
 function canConnectNodes(from: PinNode, to: PinNode): boolean {
   if (from.id === to.id) return false
-  return from.assetType === 'characters' || to.assetType === 'characters'
+  const fromType = from.assetType
+  const toType = to.assetType
+  return (fromType === 'characters' || fromType === 'worldviews') &&
+    (toType === 'characters' || toType === 'worldviews')
 }
 
 function upsertRelation(from: PinNode, to: PinNode): PinRelation {
@@ -2337,8 +2350,9 @@ function stopRelationDrag(event?: PointerEvent) {
 
   const relation = upsertRelation(from, to)
   persistRelations()
-  const line = pinLines.value.find((item) => item.relation.id === relation.id)
-  if (line && !isEnvironmentRelation(line)) openRelationEditor(line)
+  activeRelationId.value = relation.id
+  relationDraft.value = relation.label || ''
+  void nextTick(() => relationInputRef.value?.select())
 }
 
 let dragState: {
@@ -2553,6 +2567,21 @@ function nameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, '')
 }
 
+function normalizeRelationshipAssetType(value: unknown): RelationshipAssetType | undefined {
+  const raw = textValue(value).toLowerCase()
+  if (['characters', 'character', '人物', '角色'].includes(raw)) return 'characters'
+  if (['worldviews', 'worldview', 'environment', 'environments', '环境', '小环境', '场景', '地点'].includes(raw)) return 'worldviews'
+  return undefined
+}
+
+function relationshipAssetTypeLabel(type: RelationshipAssetType): string {
+  return type === 'characters' ? '人物' : '环境'
+}
+
+function relationshipAssetOptionLabel(item: RelationshipAssetOption): string {
+  return `${relationshipAssetTypeLabel(item.type)} · ${item.name}`
+}
+
 function normalizeRelationshipRows(value: unknown): SeriesRelationship[] {
   if (!Array.isArray(value)) return []
   return value.map((item) => {
@@ -2567,6 +2596,8 @@ function normalizeRelationshipRows(value: unknown): SeriesRelationship[] {
     const to = textValue(raw.to ?? raw.target ?? raw.to_name ?? raw.to_asset_name)
     const label = textValue(raw.label ?? raw.relation ?? raw.relationship ?? raw.type)
     const description = textValue(raw.description ?? raw.note ?? raw.summary)
+    const fromType = normalizeRelationshipAssetType(raw.from_asset_type ?? raw.from_type ?? raw.source_type)
+    const toType = normalizeRelationshipAssetType(raw.to_asset_type ?? raw.to_type ?? raw.target_type)
     return {
       from,
       to,
@@ -2574,25 +2605,46 @@ function normalizeRelationshipRows(value: unknown): SeriesRelationship[] {
       description,
       from_asset_id: textValue(raw.from_asset_id) || undefined,
       to_asset_id: textValue(raw.to_asset_id) || undefined,
+      from_asset_type: fromType,
+      to_asset_type: toType,
       from_asset_name: textValue(raw.from_asset_name) || from || undefined,
       to_asset_name: textValue(raw.to_asset_name) || to || undefined,
     }
   }).filter((row) => relationshipDisplayText(row))
 }
 
-function findCharacterAssetByName(name: string): AssetBase | undefined {
+function relationshipAssetById(id: string): RelationshipAssetOption | undefined {
+  return relationshipAssetOptions.value.find((item) => item.id === id)
+}
+
+function findRelationshipAssetByName(name: string, preferredType?: RelationshipAssetType): RelationshipAssetOption | undefined {
   const key = nameKey(name)
   if (!key) return undefined
-  return assets.characters.find((item) => nameKey(item.name) === key)
+  const candidates = preferredType
+    ? relationshipAssetOptions.value.filter((item) => item.type === preferredType)
+    : relationshipAssetOptions.value
+  return candidates.find((item) => nameKey(item.name) === key) ||
+    candidates.find((item) => {
+      const itemKey = nameKey(item.name)
+      return itemKey.includes(key) || key.includes(itemKey)
+    })
 }
 
 function relationshipAssetId(row: SeriesRelationship, side: 'from' | 'to'): string {
   const explicit = side === 'from' ? row.from_asset_id : row.to_asset_id
   if (explicit) return explicit
+  const preferredType = side === 'from' ? row.from_asset_type : row.to_asset_type
   const name = side === 'from'
     ? row.from || row.from_asset_name || ''
     : row.to || row.to_asset_name || ''
-  return findCharacterAssetByName(name)?.id || ''
+  return findRelationshipAssetByName(name, preferredType)?.id || ''
+}
+
+function relationshipAssetType(row: SeriesRelationship, side: 'from' | 'to'): RelationshipAssetType | undefined {
+  const explicit = side === 'from' ? row.from_asset_type : row.to_asset_type
+  if (explicit) return explicit
+  const id = relationshipAssetId(row, side)
+  return relationshipAssetById(id)?.type
 }
 
 function relationshipRelationId(row: SeriesRelationship): string {
@@ -2619,8 +2671,8 @@ function dedupeRelationshipRows(rows: SeriesRelationship[]): SeriesRelationship[
 }
 
 function relationshipDisplayKey(row: SeriesRelationship): string {
-  const left = row.from_asset_id || row.from || row.from_asset_name || ''
-  const right = row.to_asset_id || row.to || row.to_asset_name || ''
+  const left = row.from_asset_id || `${row.from_asset_type || ''}:${row.from || row.from_asset_name || ''}`
+  const right = row.to_asset_id || `${row.to_asset_type || ''}:${row.to || row.to_asset_name || ''}`
   const endpoints = [nameKey(left), nameKey(right)].sort()
   return [endpoints[0], endpoints[1], nameKey(row.label || row.description)].join('__')
 }
@@ -2642,6 +2694,8 @@ function relationshipFromLine(line: PinLine): SeriesRelationship {
     description: '',
     from_asset_id: line.from.targetId,
     to_asset_id: line.to.targetId,
+    from_asset_type: line.from.assetType === 'characters' || line.from.assetType === 'worldviews' ? line.from.assetType : undefined,
+    to_asset_type: line.to.assetType === 'characters' || line.to.assetType === 'worldviews' ? line.to.assetType : undefined,
     from_asset_name: line.from.title,
     to_asset_name: line.to.title,
   }
@@ -2660,15 +2714,15 @@ function assetPairKey(a: string, b: string): string {
   return [a, b].sort().join('__')
 }
 
-function selectedCharacterById(id: string): AssetBase | undefined {
-  return selectedAssetsMap.value.characters.find((item) => item.id === id)
+function selectedRelationshipAssetById(id: string): RelationshipAssetOption | undefined {
+  return relationshipAssetById(id)
 }
 
 function relationshipEditDraftFromRow(row: SeriesRelationship): RelationshipEditDraft | null {
   const fromId = relationshipAssetId(row, 'from')
   const toId = relationshipAssetId(row, 'to')
   if (!fromId || !toId || fromId === toId) return null
-  if (!selectedCharacterById(fromId) || !selectedCharacterById(toId)) return null
+  if (!selectedRelationshipAssetById(fromId) || !selectedRelationshipAssetById(toId)) return null
   return {
     from_asset_id: fromId,
     to_asset_id: toId,
@@ -2687,12 +2741,12 @@ function usedRelationshipPairs(current?: RelationshipEditDraft): Set<string> {
 }
 
 function firstAvailableRelationshipDraft(): RelationshipEditDraft | null {
-  const characters = selectedAssetsMap.value.characters
+  const options = relationshipAssetOptions.value
   const used = usedRelationshipPairs()
-  for (let i = 0; i < characters.length; i += 1) {
-    for (let j = i + 1; j < characters.length; j += 1) {
-      const from = characters[i]
-      const to = characters[j]
+  for (let i = 0; i < options.length; i += 1) {
+    for (let j = i + 1; j < options.length; j += 1) {
+      const from = options[i]
+      const to = options[j]
       if (!from || !to) continue
       if (!used.has(assetPairKey(from.id, to.id))) {
         return {
@@ -2724,9 +2778,9 @@ function openRelationshipDialog() {
   relationshipDialogOpen.value = true
 }
 
-function relationshipTargetOptions(row: RelationshipEditDraft): AssetBase[] {
+function relationshipTargetOptions(row: RelationshipEditDraft): RelationshipAssetOption[] {
   const used = usedRelationshipPairs(row)
-  return selectedAssetsMap.value.characters.filter((item) => {
+  return relationshipAssetOptions.value.filter((item) => {
     if (item.id === row.from_asset_id) return false
     if (!row.from_asset_id) return true
     const key = assetPairKey(row.from_asset_id, item.id)
@@ -2751,8 +2805,8 @@ function relationshipRowsFromDialogDrafts(): SeriesRelationship[] {
   const rows: SeriesRelationship[] = []
   const seen = new Set<string>()
   for (const draft of relationshipDraftRows.value) {
-    const from = selectedCharacterById(draft.from_asset_id)
-    const to = selectedCharacterById(draft.to_asset_id)
+    const from = selectedRelationshipAssetById(draft.from_asset_id)
+    const to = selectedRelationshipAssetById(draft.to_asset_id)
     if (!from || !to || from.id === to.id) continue
     const label = draft.label.trim()
     if (!label) continue
@@ -2766,6 +2820,8 @@ function relationshipRowsFromDialogDrafts(): SeriesRelationship[] {
       description: '',
       from_asset_id: from.id,
       to_asset_id: to.id,
+      from_asset_type: from.type,
+      to_asset_type: to.type,
       from_asset_name: from.name,
       to_asset_name: to.name,
     })
@@ -2784,11 +2840,8 @@ async function applyRelationshipDialog() {
   const rows = relationshipRowsFromDialogDrafts()
   aiRelationshipRows.value = rows
 
-  const characterNodeIds = new Set(pinNodes.value.filter((node) => node.assetType === 'characters').map((node) => node.id))
   relationEdges.value = relationEdges.value.map((relation) =>
-    characterNodeIds.has(relation.fromId) && characterNodeIds.has(relation.toId)
-      ? { ...relation, label: '', deleted: true }
-      : relation,
+    ({ ...relation, label: '', deleted: true }),
   )
 
   for (const row of rows) {
@@ -2807,7 +2860,7 @@ async function applyRelationshipDialog() {
   closeRelationEditor()
   await autoSaveSeries()
   relationshipDialogOpen.value = false
-  ElMessage.success('人物关系已更新')
+  ElMessage.success('资产关系已更新')
 }
 
 function findRelationshipNode(row: SeriesRelationship, side: 'from' | 'to'): PinNode | undefined {
@@ -2823,36 +2876,27 @@ function findRelationshipNode(row: SeriesRelationship, side: 'from' | 'to'): Pin
   const key = nameKey(name)
   if (!key) return undefined
 
-  const exact = pinNodes.value.find((node) => nameKey(node.title) === key)
+  const preferredType = relationshipAssetType(row, side)
+  const candidates = preferredType
+    ? pinNodes.value.filter((node) => node.assetType === preferredType)
+    : pinNodes.value
+  const exact = candidates.find((node) => nameKey(node.title) === key)
   if (exact) return exact
-  return pinNodes.value.find((node) => {
+  return candidates.find((node) => {
     const nodeKey = nameKey(node.title)
     return nodeKey.includes(key) || key.includes(nodeKey)
   })
 }
 
 function defaultRelations(): PinRelation[] {
-  const characterIds = pinNodes.value.filter((node) => node.assetType === 'characters').map((node) => node.id)
-  const environmentIds = pinNodes.value.filter((node) => node.assetType === 'worldviews').map((node) => node.id)
   const out = new Map<string, PinRelation>()
-  characterIds.forEach((id, idx) => {
-    for (const targetId of characterIds.slice(idx + 1)) {
-      const idKey = relationId(id, targetId)
-      out.set(idKey, { id: idKey, fromId: id, toId: targetId, label: '' })
-    }
-  })
-  for (const characterId of characterIds) {
-    for (const environmentId of environmentIds) {
-      const idKey = relationId(characterId, environmentId)
-      out.set(idKey, { id: idKey, fromId: characterId, toId: environmentId, label: '' })
-    }
-  }
 
   for (const row of aiRelationshipRows.value) {
     const from = findRelationshipNode(row, 'from')
     const to = findRelationshipNode(row, 'to')
     if (!from || !to || !canConnectNodes(from, to)) continue
     const label = row.label || row.description || ''
+    if (!label.trim()) continue
     const idKey = relationId(from.id, to.id)
     out.set(idKey, { id: idKey, fromId: from.id, toId: to.id, label })
   }
@@ -3010,7 +3054,7 @@ function backFromToolbar() {
 
 function goRelationshipPage() {
   if (isNew.value || !route.params.id) {
-    ElMessage.info('先保存系列后再进入人物关系')
+    ElMessage.info('先保存系列后再进入资产关系')
     return
   }
   router.push(`/app/series/${route.params.id}/relationships`)
@@ -3312,9 +3356,15 @@ async function followConsistencyTask(task: AITask, _seriesId: string) {
 
 function openAssetSuggestions(value: unknown) {
   const rows = normalizeAssetSuggestions(value)
-  if (!rows.length) return
+  const relationshipRows = normalizeRelationshipRows(
+    value && typeof value === 'object'
+      ? (value as Partial<EpisodeAssetSuggestions>).relationships
+      : undefined,
+  )
+  if (!rows.length && !relationshipRows.length) return
   clearAssetSuggestions()
   pendingAssetSuggestions.value = rows
+  pendingRelationshipSuggestions.value = relationshipRows
   for (const row of rows) {
     assetSuggestionSelection[row.key] = true
   }
@@ -3366,6 +3416,7 @@ function assetSuggestionSummary(item: PendingAssetSuggestion): string {
 
 function clearAssetSuggestions() {
   pendingAssetSuggestions.value = []
+  pendingRelationshipSuggestions.value = []
   for (const key of Object.keys(assetSuggestionSelection)) {
     delete assetSuggestionSelection[key]
   }
@@ -3377,10 +3428,55 @@ function dismissAssetSuggestions() {
   clearAssetSuggestions()
 }
 
+function resolveRelationshipSuggestionRows(rows: SeriesRelationship[]): SeriesRelationship[] {
+  const out: SeriesRelationship[] = []
+  for (const row of rows) {
+    const fromType = relationshipAssetType(row, 'from')
+    const toType = relationshipAssetType(row, 'to')
+    const fromName = row.from || row.from_asset_name || ''
+    const toName = row.to || row.to_asset_name || ''
+    const from = row.from_asset_id
+      ? relationshipAssetById(row.from_asset_id)
+      : findRelationshipAssetByName(fromName, fromType)
+    const to = row.to_asset_id
+      ? relationshipAssetById(row.to_asset_id)
+      : findRelationshipAssetByName(toName, toType)
+    const label = (row.label || row.description || '').trim()
+    if (!from || !to || from.id === to.id || !label) continue
+    out.push({
+      from: from.name,
+      to: to.name,
+      label,
+      description: row.description || '',
+      from_asset_id: from.id,
+      to_asset_id: to.id,
+      from_asset_type: from.type,
+      to_asset_type: to.type,
+      from_asset_name: from.name,
+      to_asset_name: to.name,
+    })
+  }
+  return dedupeRelationshipRows(out)
+}
+
+function appendRelationshipRowsToCanvas(rows: SeriesRelationship[]) {
+  for (const row of rows) {
+    const from = findRelationshipNode(row, 'from')
+    const to = findRelationshipNode(row, 'to')
+    const label = (row.label || row.description || '').trim()
+    if (!from || !to || !label || !canConnectNodes(from, to)) continue
+    const next = upsertRelation(from, to)
+    relationEdges.value = relationEdges.value.map((relation) =>
+      relation.id === next.id
+        ? { ...relation, label, deleted: false }
+        : relation,
+    )
+  }
+}
+
 async function confirmAssetSuggestions() {
   const rows = selectedAssetSuggestions.value
-  if (!rows.length) return
-  const seriesId = route.params.id as string
+  if (!rows.length && !pendingRelationshipSuggestions.value.length) return
   assetSuggestionSaving.value = true
   try {
     const createdIds: Record<EpisodeSuggestionAssetType, string[]> = {
@@ -3404,10 +3500,6 @@ async function confirmAssetSuggestions() {
 
     const nextCharacters = Array.from(new Set([...form.characters, ...createdIds.characters]))
     const nextWorldviews = Array.from(new Set([...form.worldviews, ...createdIds.worldviews]))
-    await seriesApi.patch(seriesId, {
-      characters: nextCharacters,
-      worldviews: nextWorldviews,
-    })
     for (const type of Object.keys(resolvedAssets) as EpisodeSuggestionAssetType[]) {
       for (const asset of resolvedAssets[type]) {
         assets[type] = [
@@ -3418,9 +3510,22 @@ async function confirmAssetSuggestions() {
     }
     form.characters = nextCharacters
     form.worldviews = nextWorldviews
+    await nextTick()
+
+    const relationshipRows = resolveRelationshipSuggestionRows(pendingRelationshipSuggestions.value)
+    if (relationshipRows.length) {
+      aiRelationshipRows.value = dedupeRelationshipRows([
+        ...relationshipDisplayRows.value,
+        ...aiRelationshipRows.value,
+        ...relationshipRows,
+      ])
+      appendRelationshipRowsToCanvas(relationshipRows)
+      persistRelations()
+    }
+    await autoSaveSeries()
     assetSuggestionDialogOpen.value = false
     clearAssetSuggestions()
-    ElMessage.success(`已加入 ${rows.length} 个系列资产`)
+    ElMessage.success(rows.length ? `已加入 ${rows.length} 个系列资产` : '已同步资产关系')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '加入系列资产失败')
   } finally {

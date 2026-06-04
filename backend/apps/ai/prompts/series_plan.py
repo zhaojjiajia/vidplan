@@ -50,7 +50,7 @@ text_to_video | image_to_video | virtual_ip
   "title_style": {{"pattern":"","examples":["示例标题 1","示例标题 2"],"length":"建议字数"}},
   "initial_topics": ["选题 1","选题 2","选题 3","选题 4","选题 5"],
   "relationships": [
-    {{"from":"人物 A","to":"人物 B","label":"关系,如朋友/敌人/师徒/家人","description":"可选补充"}}
+    {{"from":"人物 A","from_type":"characters","to":"小环境 A","to_type":"worldviews","label":"关系,如居住/工作/敌人/师徒/家人","description":"可选补充"}}
   ],
   "assets": {{
     "characters": [
@@ -69,7 +69,9 @@ text_to_video | image_to_video | virtual_ip
 }}
 
 如果系列想法是剧情、短剧、动画、虚拟 IP、连载叙事或明确出现人物/角色名,assets.characters 必须输出主要角色;至少包含主角、核心对手和重要配角,不要只生成大环境或风格资产。
-人物关系只在明确存在多个人物或角色关系时输出;日常 vlog、教程、游戏流程、知识栏目等没有人物关系时输出空数组 []。
+关系只在输入明确写出或可以强推断出两个资产之间关系时输出;不要为了让画布好看把所有人物两两相连。
+relationships 可连接人物与人物、人物与小环境、小环境与小环境;from_type/to_type 只能填 characters 或 worldviews。
+如果输入中写明某个角色的居住环境、家、住处、房间、宿舍、基地、办公室、实验室、小店等,必须在 assets.worldviews 生成对应小环境资产,并在 relationships 中连接该角色与该小环境,不要只把它写进人物 payload。
 如果输入中已有角色名,必须沿用输入中的角色名生成 characters,不要把角色合并进大环境、世界观或栏目。
 大环境必须输出到 positioning.big_environment,它不是资产,不要放入 assets.worldviews。
 assets.worldviews 只用于小环境资产,例如某个角色的居住环境、工作间、常去地点等;如果系列想法或大纲内容没有明确标注这类具体小环境,worldviews 必须输出空数组 []。

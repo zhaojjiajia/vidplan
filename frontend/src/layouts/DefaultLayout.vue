@@ -189,7 +189,7 @@ const workspaceTitle = computed(() => {
   if (route.name === 'plan-new') return '创建方案'
   if (route.name === 'plan-edit') return '方案编辑'
   if (route.name === 'series-new') return '新建系列'
-  if (route.name === 'series-relationships') return '人物关系'
+  if (route.name === 'series-relationships') return '资产关系'
   if (route.name === 'series-edit') return '系列编辑'
   if (route.name === 'ai-settings') return 'AI 设置'
   if (route.name === 'asset-characters') return '人物资产'

@@ -127,6 +127,7 @@ export interface AssetSuggestion {
 export interface EpisodeAssetSuggestions {
   characters: AssetSuggestion[]
   worldviews: AssetSuggestion[]
+  relationships?: Array<Record<string, unknown>>
 }
 
 export interface AssetSchemaField {

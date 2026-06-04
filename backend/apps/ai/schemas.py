@@ -146,6 +146,8 @@ class SeriesRelationshipSuggestion(BaseModel):
 
     from_: str = Field(default="", alias="from")
     to: str = ""
+    from_type: str = ""
+    to_type: str = ""
     label: str = ""
     description: str = ""
 
